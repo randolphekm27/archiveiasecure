@@ -14,11 +14,16 @@ export default function DocumentsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadData();
-  }, [profile]);
+    if (profile?.organization_id) {
+      loadData();
+    }
+  }, [profile?.organization_id]);
 
   const loadData = async () => {
-    if (!profile?.organization_id) return;
+    if (!profile?.organization_id) {
+      setLoading(false);
+      return;
+    }
 
     try {
       const [docsResult, catsResult] = await Promise.all([

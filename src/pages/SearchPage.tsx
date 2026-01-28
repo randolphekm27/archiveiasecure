@@ -23,15 +23,20 @@ export default function SearchPage() {
   });
 
   useEffect(() => {
-    loadData();
-  }, [profile]);
+    if (profile?.organization_id) {
+      loadData();
+    }
+  }, [profile?.organization_id]);
 
   useEffect(() => {
     applyFilters();
   }, [searchQuery, filters, documents]);
 
   const loadData = async () => {
-    if (!profile?.organization_id) return;
+    if (!profile?.organization_id) {
+      setLoading(false);
+      return;
+    }
 
     try {
       const [docsResult, catsResult] = await Promise.all([

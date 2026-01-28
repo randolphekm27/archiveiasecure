@@ -42,11 +42,16 @@ export default function AdminPage() {
   });
 
   useEffect(() => {
-    loadData();
-  }, [profile]);
+    if (profile?.organization_id) {
+      loadData();
+    }
+  }, [profile?.organization_id]);
 
   const loadData = async () => {
-    if (!profile?.organization_id) return;
+    if (!profile?.organization_id) {
+      setLoading(false);
+      return;
+    }
 
     try {
       const [usersResult, catsResult] = await Promise.all([

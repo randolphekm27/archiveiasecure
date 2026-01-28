@@ -24,11 +24,15 @@ export default function UploadPage({ onNavigate }: { onNavigate: (page: string) 
   });
 
   useEffect(() => {
-    loadCategories();
-  }, [profile]);
+    if (profile?.organization_id) {
+      loadCategories();
+    }
+  }, [profile?.organization_id]);
 
   const loadCategories = async () => {
-    if (!profile?.organization_id) return;
+    if (!profile?.organization_id) {
+      return;
+    }
 
     const { data } = await supabase
       .from('categories')
