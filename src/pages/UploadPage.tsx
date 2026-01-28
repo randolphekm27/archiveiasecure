@@ -7,7 +7,7 @@ import type { Database } from '../lib/database.types';
 type Category = Database['public']['Tables']['categories']['Row'];
 
 export default function UploadPage({ onNavigate }: { onNavigate: (page: string) => void }) {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
   const [uploading, setUploading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -24,10 +24,10 @@ export default function UploadPage({ onNavigate }: { onNavigate: (page: string) 
   });
 
   useEffect(() => {
-    if (profile?.organization_id) {
+    if (!authLoading && profile?.organization_id) {
       loadCategories();
     }
-  }, [profile?.organization_id]);
+  }, [authLoading, profile?.organization_id]);
 
   const loadCategories = async () => {
     if (!profile?.organization_id) {

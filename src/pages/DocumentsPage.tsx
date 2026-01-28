@@ -8,16 +8,20 @@ type Document = Database['public']['Tables']['documents']['Row'];
 type Category = Database['public']['Tables']['categories']['Row'];
 
 export default function DocumentsPage() {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (profile?.organization_id) {
-      loadData();
+    if (!authLoading) {
+      if (profile?.organization_id) {
+        loadData();
+      } else {
+        setLoading(false);
+      }
     }
-  }, [profile?.organization_id]);
+  }, [authLoading, profile?.organization_id]);
 
   const loadData = async () => {
     if (!profile?.organization_id) {

@@ -8,7 +8,7 @@ type Document = Database['public']['Tables']['documents']['Row'];
 type Category = Database['public']['Tables']['categories']['Row'];
 
 export default function SearchPage() {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [documents, setDocuments] = useState<Document[]>([]);
   const [filteredDocs, setFilteredDocs] = useState<Document[]>([]);
@@ -23,10 +23,14 @@ export default function SearchPage() {
   });
 
   useEffect(() => {
-    if (profile?.organization_id) {
-      loadData();
+    if (!authLoading) {
+      if (profile?.organization_id) {
+        loadData();
+      } else {
+        setLoading(false);
+      }
     }
-  }, [profile?.organization_id]);
+  }, [authLoading, profile?.organization_id]);
 
   useEffect(() => {
     applyFilters();

@@ -18,7 +18,7 @@ type User = Database['public']['Tables']['users']['Row'];
 type Category = Database['public']['Tables']['categories']['Row'];
 
 export default function AdminPage() {
-  const { profile, organization } = useAuth();
+  const { profile, organization, loading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<'users' | 'categories' | 'org'>('users');
   const [users, setUsers] = useState<User[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -42,10 +42,14 @@ export default function AdminPage() {
   });
 
   useEffect(() => {
-    if (profile?.organization_id) {
-      loadData();
+    if (!authLoading) {
+      if (profile?.organization_id) {
+        loadData();
+      } else {
+        setLoading(false);
+      }
     }
-  }, [profile?.organization_id]);
+  }, [authLoading, profile?.organization_id]);
 
   const loadData = async () => {
     if (!profile?.organization_id) {
