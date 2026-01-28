@@ -38,9 +38,12 @@ export default function DashboardPage({ onNavigate }: { onNavigate: (page: strin
   }, [profile]);
 
   const loadDashboardData = async () => {
-    if (!profile?.organization_id) return;
-
     try {
+      if (!profile?.organization_id) {
+        setLoading(false);
+        return;
+      }
+
       const { data: documents } = await supabase
         .from('documents')
         .select('*')
