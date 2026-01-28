@@ -82,37 +82,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signIn = async (orgCode: string, username: string, password: string) => {
-    const { data: org, error: orgError } = await supabase
-      .from('organizations')
-      .select('id')
-      .eq('code', orgCode)
-      .maybeSingle();
+    try {
+      const virtualEmail = `${username}+${orgCode}@archivia.app`;
 
-    if (orgError || !org) {
-      throw new Error('Code organisation invalide');
+      const { data: authUser, error: authError } = await supabase.auth.signInWithPassword({
+        email: virtualEmail,
+        password,
+      });
+
+      if (authError) {
+        if (authError.message.includes('Invalid login credentials') || authError.message.includes('User not found')) {
+          throw new Error('Identifiant ou mot de passe incorrect');
+        }
+        throw authError;
+      }
+
+      await loadProfile(authUser.user.id);
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Erreur de connexion');
     }
-
-    const { data: userProfile, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('organization_id', org.id)
-      .eq('username', username)
-      .maybeSingle();
-
-    if (userError || !userProfile) {
-      throw new Error('Identifiant invalide');
-    }
-
-    const { data: authUser, error: authError } = await supabase.auth.signInWithPassword({
-      email: `${username}@${orgCode}.archivia.local`,
-      password,
-    });
-
-    if (authError) {
-      throw new Error('Mot de passe incorrect');
-    }
-
-    await loadProfile(authUser.user.id);
   };
 
   const signUp = async (orgCode: string, username: string, email: string, password: string, fullName: string) => {
@@ -126,7 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('Code organisation invalide');
     }
 
-    const virtualEmail = `${username}@${orgCode}.archivia.local`;
+    const virtualEmail = `${username}+${orgCode}@archivia.app`;
 
     const { data: authData, error: signUpError } = await supabase.auth.signUp({
       email: virtualEmail,
@@ -190,7 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw orgError;
     }
 
-    const virtualEmail = `admin@${orgData.code}.archivia.local`;
+    const virtualEmail = `admin+${orgData.code}@archivia.app`;
 
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: virtualEmail,

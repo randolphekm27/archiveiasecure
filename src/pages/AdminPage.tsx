@@ -77,7 +77,7 @@ export default function AdminPage() {
     if (!profile?.organization_id || !organization) return;
 
     try {
-      const virtualEmail = `${newUser.username}@${organization.code}.archivia.local`;
+      const virtualEmail = `${newUser.username}+${organization.code}@archivia.app`;
 
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: virtualEmail,
@@ -87,6 +87,14 @@ export default function AdminPage() {
       if (authError) throw authError;
 
       if (authData.user) {
+        // Sign in immediately to establish session
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: virtualEmail,
+          password: newUser.password,
+        });
+
+        if (signInError) throw signInError;
+
         const { error: profileError } = await supabase.from('users').insert({
           id: authData.user.id,
           organization_id: profile.organization_id,
