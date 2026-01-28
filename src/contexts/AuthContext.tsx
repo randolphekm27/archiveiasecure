@@ -26,24 +26,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const initializeAuth = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      (async () => {
         setUser(session?.user ?? null);
         if (session?.user) {
           await loadProfile(session.user.id);
         }
-      } catch (error) {
-        console.error('Auth initialization error:', error);
-      } finally {
         setLoading(false);
-      }
-    };
+      })();
+    });
 
-    initializeAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      try {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      (async () => {
         setUser(session?.user ?? null);
         if (session?.user) {
           await loadProfile(session.user.id);
@@ -51,11 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setProfile(null);
           setOrganization(null);
         }
-      } catch (error) {
-        console.error('Auth state change error:', error);
-      } finally {
-        setLoading(false);
-      }
+      })();
     });
 
     return () => subscription.unsubscribe();

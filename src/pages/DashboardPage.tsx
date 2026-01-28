@@ -22,7 +22,7 @@ interface DashboardStats {
 }
 
 export default function DashboardPage({ onNavigate }: { onNavigate: (page: string) => void }) {
-  const { profile, loading: authLoading } = useAuth();
+  const { profile } = useAuth();
   const [stats, setStats] = useState<DashboardStats>({
     totalDocuments: 0,
     recentDocuments: 0,
@@ -34,16 +34,11 @@ export default function DashboardPage({ onNavigate }: { onNavigate: (page: strin
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!authLoading) {
-      loadDashboardData();
-    }
-  }, [authLoading, profile?.organization_id]);
+    loadDashboardData();
+  }, [profile]);
 
   const loadDashboardData = async () => {
-    if (!profile?.organization_id) {
-      setLoading(false);
-      return;
-    }
+    if (!profile?.organization_id) return;
 
     try {
       const { data: documents } = await supabase

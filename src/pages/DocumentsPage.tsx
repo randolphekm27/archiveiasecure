@@ -8,26 +8,17 @@ type Document = Database['public']['Tables']['documents']['Row'];
 type Category = Database['public']['Tables']['categories']['Row'];
 
 export default function DocumentsPage() {
-  const { profile, loading: authLoading } = useAuth();
+  const { profile } = useAuth();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!authLoading) {
-      if (profile?.organization_id) {
-        loadData();
-      } else {
-        setLoading(false);
-      }
-    }
-  }, [authLoading, profile?.organization_id]);
+    loadData();
+  }, [profile]);
 
   const loadData = async () => {
-    if (!profile?.organization_id) {
-      setLoading(false);
-      return;
-    }
+    if (!profile?.organization_id) return;
 
     try {
       const [docsResult, catsResult] = await Promise.all([

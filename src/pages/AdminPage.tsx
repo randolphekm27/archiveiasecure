@@ -18,7 +18,7 @@ type User = Database['public']['Tables']['users']['Row'];
 type Category = Database['public']['Tables']['categories']['Row'];
 
 export default function AdminPage() {
-  const { profile, organization, loading: authLoading } = useAuth();
+  const { profile, organization } = useAuth();
   const [activeTab, setActiveTab] = useState<'users' | 'categories' | 'org'>('users');
   const [users, setUsers] = useState<User[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -42,20 +42,11 @@ export default function AdminPage() {
   });
 
   useEffect(() => {
-    if (!authLoading) {
-      if (profile?.organization_id) {
-        loadData();
-      } else {
-        setLoading(false);
-      }
-    }
-  }, [authLoading, profile?.organization_id]);
+    loadData();
+  }, [profile]);
 
   const loadData = async () => {
-    if (!profile?.organization_id) {
-      setLoading(false);
-      return;
-    }
+    if (!profile?.organization_id) return;
 
     try {
       const [usersResult, catsResult] = await Promise.all([

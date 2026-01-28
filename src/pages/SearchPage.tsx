@@ -8,7 +8,7 @@ type Document = Database['public']['Tables']['documents']['Row'];
 type Category = Database['public']['Tables']['categories']['Row'];
 
 export default function SearchPage() {
-  const { profile, loading: authLoading } = useAuth();
+  const { profile } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [documents, setDocuments] = useState<Document[]>([]);
   const [filteredDocs, setFilteredDocs] = useState<Document[]>([]);
@@ -23,24 +23,15 @@ export default function SearchPage() {
   });
 
   useEffect(() => {
-    if (!authLoading) {
-      if (profile?.organization_id) {
-        loadData();
-      } else {
-        setLoading(false);
-      }
-    }
-  }, [authLoading, profile?.organization_id]);
+    loadData();
+  }, [profile]);
 
   useEffect(() => {
     applyFilters();
   }, [searchQuery, filters, documents]);
 
   const loadData = async () => {
-    if (!profile?.organization_id) {
-      setLoading(false);
-      return;
-    }
+    if (!profile?.organization_id) return;
 
     try {
       const [docsResult, catsResult] = await Promise.all([
