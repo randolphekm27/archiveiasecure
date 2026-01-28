@@ -46,9 +46,12 @@ export default function AdminPage() {
   }, [profile]);
 
   const loadData = async () => {
-    if (!profile?.organization_id) return;
-
     try {
+      if (!profile?.organization_id) {
+        setLoading(false);
+        return;
+      }
+
       const [usersResult, catsResult] = await Promise.all([
         supabase
           .from('users')
