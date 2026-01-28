@@ -138,6 +138,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (authData.user) {
+      // Sign in immediately to establish session
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: virtualEmail,
+        password,
+      });
+
+      if (signInError) {
+        throw signInError;
+      }
+
+      // Now insert the profile with authenticated session
       const { error: profileError } = await supabase.from('users').insert({
         id: authData.user.id,
         organization_id: org.id,
@@ -191,6 +202,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (authData.user) {
+      // Sign in immediately to establish session
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: virtualEmail,
+        password: orgData.adminPassword,
+      });
+
+      if (signInError) {
+        console.error('Sign in error:', signInError);
+        throw signInError;
+      }
+
+      // Now insert the profile with authenticated session
       const { error: profileError } = await supabase.from('users').insert({
         id: authData.user.id,
         organization_id: org.id,
@@ -200,6 +223,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (profileError) {
+        console.error('Profile creation error:', profileError);
         throw profileError;
       }
 
@@ -210,12 +234,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         { name: 'Projets', description: 'Documents de projets', color: '#8B5CF6' },
       ];
 
-      await supabase.from('categories').insert(
+      const { error: catError } = await supabase.from('categories').insert(
         defaultCategories.map(cat => ({
           ...cat,
           organization_id: org.id,
         }))
       );
+
+      if (catError) {
+        console.error('Categories creation error:', catError);
+      }
 
       await loadProfile(authData.user.id);
     }
