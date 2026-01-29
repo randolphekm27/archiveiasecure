@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import LoginPage from './pages/LoginPage';
+import JoinPage from './pages/JoinPage';
 import Layout from './components/Layout';
 import DashboardPage from './pages/DashboardPage';
 import DocumentsPage from './pages/DocumentsPage';
@@ -9,7 +11,7 @@ import SearchPage from './pages/SearchPage';
 import AdminPage from './pages/AdminPage';
 import ProfilePage from './pages/ProfilePage';
 
-function App() {
+function AppRoutes() {
   const { user, loading } = useAuth();
   const [currentPage, setCurrentPage] = useState('dashboard');
 
@@ -25,7 +27,13 @@ function App() {
   }
 
   if (!user) {
-    return <LoginPage />;
+    return (
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/join/:token" element={<JoinPage />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    );
   }
 
   const renderPage = () => {
@@ -48,9 +56,24 @@ function App() {
   };
 
   return (
-    <Layout currentPage={currentPage as any} onNavigate={setCurrentPage}>
-      {renderPage()}
-    </Layout>
+    <Routes>
+      <Route
+        path="/*"
+        element={
+          <Layout currentPage={currentPage as any} onNavigate={setCurrentPage}>
+            {renderPage()}
+          </Layout>
+        }
+      />
+    </Routes>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <AppRoutes />
+    </Router>
   );
 }
 
