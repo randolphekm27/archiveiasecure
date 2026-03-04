@@ -26,16 +26,6 @@ function AppRoutes() {
     );
   }
 
-  if (!user) {
-    return (
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/join/:token" element={<JoinPage />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
-    );
-  }
-
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
@@ -57,12 +47,18 @@ function AppRoutes() {
 
   return (
     <Routes>
+      <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/" replace />} />
+      <Route path="/join/:token" element={<JoinPage />} />
       <Route
         path="/*"
         element={
-          <Layout currentPage={currentPage as any} onNavigate={setCurrentPage}>
-            {renderPage()}
-          </Layout>
+          user ? (
+            <Layout currentPage={currentPage as any} onNavigate={setCurrentPage}>
+              {renderPage()}
+            </Layout>
+          ) : (
+            <Navigate to="/login" replace />
+          )
         }
       />
     </Routes>
