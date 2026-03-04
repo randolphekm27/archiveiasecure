@@ -13,6 +13,7 @@ import ProfilePage from './pages/ProfilePage';
 import DeletionRequestsPage from './pages/DeletionRequestsPage';
 import SecureTrashPage from './pages/SecureTrashPage';
 import ActivityLogPage from './pages/ActivityLogPage';
+import StatisticsPage from './pages/StatisticsPage';
 
 function AppRoutes() {
   const { user, loading } = useAuth();
@@ -49,6 +50,8 @@ function AppRoutes() {
         return <SecureTrashPage />;
       case 'activity':
         return <ActivityLogPage />;
+      case 'statistics':
+        return <StatisticsPage />;
       default:
         return <DashboardPage onNavigate={setCurrentPage} />;
     }

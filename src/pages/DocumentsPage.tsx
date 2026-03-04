@@ -4,12 +4,13 @@ import {
   Calendar,
   Tag,
   Download,
-  Eye,
   Star,
   Trash2,
   AlertTriangle,
   X,
   ShieldAlert,
+  Maximize2,
+  ExternalLink,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -25,9 +26,11 @@ export default function DocumentsPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletionModal, setDeletionModal] = useState<Document | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
   const [deletionReason, setDeletionReason] = useState('');
   const [submittingDeletion, setSubmittingDeletion] = useState(false);
   const [deletionSuccess, setDeletionSuccess] = useState(false);
+  const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
 
   useEffect(() => {
     loadData();
@@ -98,6 +101,14 @@ export default function DocumentsPage() {
     }
   };
 
+  const handlePreview = async (doc: Document) => {
+    setPreviewDoc(doc);
+    await supabase
+      .from('documents')
+      .update({ views_count: (doc.views_count || 0) + 1 })
+      .eq('id', doc.id);
+  };
+
   const getCategoryName = (categoryId: string | null) => {
     if (!categoryId) return 'Non categorise';
     return categories.find((c) => c.id === categoryId)?.name || 'Inconnue';
@@ -106,6 +117,10 @@ export default function DocumentsPage() {
   const getCategoryColor = (categoryId: string | null) => {
     if (!categoryId) return '#94A3B8';
     return categories.find((c) => c.id === categoryId)?.color || '#94A3B8';
+  };
+
+  const isPreviewable = (fileType: string) => {
+    return ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileType.toLowerCase());
   };
 
   if (loading) {
@@ -126,113 +141,282 @@ export default function DocumentsPage() {
             {documents.length > 1 ? 's' : ''}
           </p>
         </div>
+        <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+          <button
+            onClick={() => setViewMode('table')}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              viewMode === 'table' ? 'bg-white shadow text-slate-900' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Liste
+          </button>
+          <button
+            onClick={() => setViewMode('grid')}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              viewMode === 'grid' ? 'bg-white shadow text-slate-900' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Grille
+          </button>
+        </div>
       </div>
 
       {documents.length > 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  <th className="text-left px-6 py-3 text-sm font-semibold text-slate-700">Document</th>
-                  <th className="text-left px-6 py-3 text-sm font-semibold text-slate-700">Date</th>
-                  <th className="text-left px-6 py-3 text-sm font-semibold text-slate-700">Categorie</th>
-                  <th className="text-left px-6 py-3 text-sm font-semibold text-slate-700">Mots-cles</th>
-                  <th className="text-right px-6 py-3 text-sm font-semibold text-slate-700">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {documents.map((doc) => (
-                  <tr key={doc.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-                          style={{ backgroundColor: `${getCategoryColor(doc.category_id)}20` }}
-                        >
-                          <FileText className="w-5 h-5" style={{ color: getCategoryColor(doc.category_id) }} />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-slate-900">{doc.title}</p>
-                            {doc.is_important && (
-                              <Star className="w-4 h-4 text-amber-500 fill-amber-500 flex-shrink-0" />
+        viewMode === 'table' ? (
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="text-left px-6 py-3 text-sm font-semibold text-slate-700">Document</th>
+                    <th className="text-left px-6 py-3 text-sm font-semibold text-slate-700">Date</th>
+                    <th className="text-left px-6 py-3 text-sm font-semibold text-slate-700">Categorie</th>
+                    <th className="text-left px-6 py-3 text-sm font-semibold text-slate-700">Mots-cles</th>
+                    <th className="text-right px-6 py-3 text-sm font-semibold text-slate-700">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {documents.map((doc) => (
+                    <tr key={doc.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                            style={{ backgroundColor: `${getCategoryColor(doc.category_id)}20` }}
+                          >
+                            <FileText className="w-5 h-5" style={{ color: getCategoryColor(doc.category_id) }} />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-slate-900">{doc.title}</p>
+                              {doc.is_important && (
+                                <Star className="w-4 h-4 text-amber-500 fill-amber-500 flex-shrink-0" />
+                              )}
+                            </div>
+                            {doc.description && (
+                              <p className="text-xs text-slate-500 truncate max-w-xs">{doc.description}</p>
                             )}
                           </div>
-                          <p className="text-sm text-slate-500">{doc.file_type.toUpperCase()}</p>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2 text-slate-600">
-                        <Calendar className="w-4 h-4" />
-                        <span className="text-sm">
-                          {new Date(doc.document_date).toLocaleDateString('fr-FR')}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2 text-slate-600">
+                          <Calendar className="w-4 h-4" />
+                          <span className="text-sm">
+                            {new Date(doc.document_date).toLocaleDateString('fr-FR')}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span
+                          className="px-3 py-1 rounded-full text-xs font-medium"
+                          style={{
+                            backgroundColor: `${getCategoryColor(doc.category_id)}20`,
+                            color: getCategoryColor(doc.category_id),
+                          }}
+                        >
+                          {getCategoryName(doc.category_id)}
                         </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className="px-3 py-1 rounded-full text-xs font-medium"
-                        style={{
-                          backgroundColor: `${getCategoryColor(doc.category_id)}20`,
-                          color: getCategoryColor(doc.category_id),
-                        }}
-                      >
-                        {getCategoryName(doc.category_id)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      {doc.keywords.length > 0 ? (
-                        <div className="flex items-center gap-1 text-slate-600">
-                          <Tag className="w-3.5 h-3.5" />
-                          <span className="text-sm">{doc.keywords.slice(0, 2).join(', ')}</span>
-                        </div>
-                      ) : (
-                        <span className="text-sm text-slate-400">-</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-2">
-                        <a
-                          href={doc.file_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="p-2 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Voir"
-                        >
-                          <Eye className="w-4 h-4 text-blue-600" />
-                        </a>
-                        <a
-                          href={doc.file_url}
-                          download
-                          className="p-2 hover:bg-emerald-50 rounded-lg transition-colors"
-                          title="Telecharger"
-                        >
-                          <Download className="w-4 h-4 text-emerald-600" />
-                        </a>
-                        {profile?.role === 'admin' && (
-                          <button
-                            onClick={() => setDeletionModal(doc)}
-                            className="p-2 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Demander la suppression"
-                          >
-                            <Trash2 className="w-4 h-4 text-red-600" />
-                          </button>
+                      </td>
+                      <td className="px-6 py-4">
+                        {doc.keywords.length > 0 ? (
+                          <div className="flex items-center gap-1 text-slate-600">
+                            <Tag className="w-3.5 h-3.5" />
+                            <span className="text-sm">{doc.keywords.slice(0, 2).join(', ')}</span>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-slate-400">-</span>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center justify-end gap-1">
+                          {isPreviewable(doc.file_type) && (
+                            <button
+                              onClick={() => handlePreview(doc)}
+                              className="p-2 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Apercu"
+                            >
+                              <Maximize2 className="w-4 h-4 text-blue-600" />
+                            </button>
+                          )}
+                          <a
+                            href={doc.file_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                            title="Ouvrir"
+                          >
+                            <ExternalLink className="w-4 h-4 text-slate-600" />
+                          </a>
+                          <a
+                            href={doc.file_url}
+                            download
+                            className="p-2 hover:bg-emerald-50 rounded-lg transition-colors"
+                            title="Telecharger"
+                          >
+                            <Download className="w-4 h-4 text-emerald-600" />
+                          </a>
+                          {profile?.role === 'admin' && (
+                            <button
+                              onClick={() => setDeletionModal(doc)}
+                              className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Demander la suppression"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-600" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {documents.map((doc) => (
+              <div
+                key={doc.id}
+                className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow group"
+              >
+                <div
+                  className="h-3 w-full"
+                  style={{ backgroundColor: getCategoryColor(doc.category_id) }}
+                />
+                <div className="p-5">
+                  <div className="flex items-start justify-between mb-3">
+                    <div
+                      className="w-10 h-10 rounded-lg flex items-center justify-center"
+                      style={{ backgroundColor: `${getCategoryColor(doc.category_id)}20` }}
+                    >
+                      <FileText className="w-5 h-5" style={{ color: getCategoryColor(doc.category_id) }} />
+                    </div>
+                    {doc.is_important && (
+                      <Star className="w-5 h-5 text-amber-500 fill-amber-500" />
+                    )}
+                  </div>
+                  <h3 className="font-semibold text-slate-900 mb-1 line-clamp-2">{doc.title}</h3>
+                  {doc.description && (
+                    <p className="text-xs text-slate-500 mb-2 line-clamp-2">{doc.description}</p>
+                  )}
+                  <div className="flex items-center gap-2 text-xs text-slate-500 mb-3">
+                    <Calendar className="w-3.5 h-3.5" />
+                    {new Date(doc.document_date).toLocaleDateString('fr-FR')}
+                    <span className="px-2 py-0.5 rounded-full text-xs"
+                      style={{
+                        backgroundColor: `${getCategoryColor(doc.category_id)}15`,
+                        color: getCategoryColor(doc.category_id),
+                      }}
+                    >
+                      {getCategoryName(doc.category_id)}
+                    </span>
+                  </div>
+                  {doc.keywords.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {doc.keywords.slice(0, 3).map((kw) => (
+                        <span key={kw} className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs rounded-full">
+                          {kw}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-end gap-1 pt-3 border-t border-slate-100">
+                    {isPreviewable(doc.file_type) && (
+                      <button
+                        onClick={() => handlePreview(doc)}
+                        className="p-2 hover:bg-blue-50 rounded-lg transition-colors"
+                      >
+                        <Maximize2 className="w-4 h-4 text-blue-600" />
+                      </button>
+                    )}
+                    <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
+                      className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
+                      <ExternalLink className="w-4 h-4 text-slate-600" />
+                    </a>
+                    <a href={doc.file_url} download
+                      className="p-2 hover:bg-emerald-50 rounded-lg transition-colors">
+                      <Download className="w-4 h-4 text-emerald-600" />
+                    </a>
+                    {profile?.role === 'admin' && (
+                      <button onClick={() => setDeletionModal(doc)}
+                        className="p-2 hover:bg-red-50 rounded-lg transition-colors">
+                        <Trash2 className="w-4 h-4 text-red-600" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
       ) : (
         <div className="bg-white rounded-xl p-12 border border-slate-200 text-center">
           <FileText className="w-16 h-16 mx-auto mb-4 text-slate-400" />
           <h3 className="text-lg font-semibold text-slate-900 mb-1">Aucun document</h3>
           <p className="text-slate-600">Commencez par ajouter votre premier document</p>
+        </div>
+      )}
+
+      {previewDoc && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+              <div>
+                <h3 className="font-semibold text-slate-900">{previewDoc.title}</h3>
+                <p className="text-sm text-slate-500">
+                  {previewDoc.file_type.toUpperCase()} - {new Date(previewDoc.document_date).toLocaleDateString('fr-FR')}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={previewDoc.file_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <ExternalLink className="w-5 h-5 text-slate-600" />
+                </a>
+                <a
+                  href={previewDoc.file_url}
+                  download
+                  className="p-2 hover:bg-emerald-50 rounded-lg transition-colors"
+                >
+                  <Download className="w-5 h-5 text-emerald-600" />
+                </a>
+                <button
+                  onClick={() => setPreviewDoc(null)}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-slate-600" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto bg-slate-100 p-4">
+              {['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(previewDoc.file_type.toLowerCase()) ? (
+                <img
+                  src={previewDoc.file_url}
+                  alt={previewDoc.title}
+                  className="max-w-full mx-auto rounded-lg shadow-lg"
+                />
+              ) : previewDoc.file_type.toLowerCase() === 'pdf' ? (
+                <iframe
+                  src={previewDoc.file_url}
+                  className="w-full h-full min-h-[60vh] rounded-lg"
+                  title={previewDoc.title}
+                />
+              ) : (
+                <div className="text-center py-20 text-slate-500">
+                  <FileText className="w-16 h-16 mx-auto mb-3 opacity-30" />
+                  <p>Apercu non disponible pour ce type de fichier</p>
+                  <a href={previewDoc.file_url} target="_blank" rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-700 text-sm mt-2 inline-block">
+                    Ouvrir dans un nouvel onglet
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -273,7 +457,7 @@ export default function DocumentsPage() {
 
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
                   <p className="text-sm text-amber-800">
-                    La suppression necessite l'approbation de 3 administrateurs. Le document sera
+                    La suppression necessite l'approbation des administrateurs. Le document sera
                     place en corbeille securisee pendant 30 jours avant suppression definitive.
                   </p>
                 </div>

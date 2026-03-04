@@ -13,12 +13,13 @@ import {
   Activity,
   ShieldAlert,
   Trash2,
-  Bell,
+  BarChart3,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import NotificationsPanel from './NotificationsPanel';
 
-type PageId = 'dashboard' | 'documents' | 'upload' | 'search' | 'admin' | 'profile' | 'activity' | 'deletion-requests' | 'secure-trash';
+type PageId = 'dashboard' | 'documents' | 'upload' | 'search' | 'admin' | 'profile' | 'activity' | 'deletion-requests' | 'secure-trash' | 'statistics';
 
 interface LayoutProps {
   children: ReactNode;
@@ -54,6 +55,7 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
     { id: 'documents', label: 'Mes Documents', icon: FileText, show: true, badge: 0 },
     { id: 'upload', label: 'Nouveau Document', icon: Upload, show: canUpload, badge: 0 },
     { id: 'search', label: 'Recherche', icon: Search, show: true, badge: 0 },
+    { id: 'statistics', label: 'Statistiques', icon: BarChart3, show: isAdmin, badge: 0 },
     { id: 'deletion-requests', label: 'Suppressions', icon: ShieldAlert, show: isAdmin, badge: pendingDeletions },
     { id: 'secure-trash', label: 'Corbeille', icon: Trash2, show: isAdmin, badge: 0 },
     { id: 'activity', label: 'Journal', icon: Activity, show: isAdmin, badge: 0 },
@@ -89,18 +91,8 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
               </div>
             </div>
 
-            <div className="flex items-center gap-4">
-              {isAdmin && pendingDeletions > 0 && (
-                <button
-                  onClick={() => onNavigate('deletion-requests')}
-                  className="relative p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  <Bell className="w-5 h-5 text-slate-600" />
-                  <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
-                    {pendingDeletions}
-                  </span>
-                </button>
-              )}
+            <div className="flex items-center gap-3">
+              <NotificationsPanel onNavigate={onNavigate} />
               <div className="hidden md:flex items-center gap-2 bg-slate-100 rounded-lg px-3 py-2">
                 <User className="w-4 h-4 text-slate-600" />
                 <span className="text-sm font-medium text-slate-700">{profile?.full_name}</span>

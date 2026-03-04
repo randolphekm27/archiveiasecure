@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Upload, FileText, Calendar, Tag, FolderOpen, Check, AlertCircle } from 'lucide-react';
+import { Upload, FileText, Calendar, Tag, FolderOpen, Check, AlertCircle, Sparkles, Plus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import { suggestKeywords, suggestCategory } from '../lib/aiAssistant';
 import type { Database } from '../lib/database.types';
 
 type Category = Database['public']['Tables']['categories']['Row'];
@@ -13,10 +14,13 @@ export default function UploadPage({ onNavigate }: { onNavigate: (page: string) 
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
   const [dragActive, setDragActive] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+  const [showAiPanel, setShowAiPanel] = useState(false);
 
   const [file, setFile] = useState<File | null>(null);
   const [formData, setFormData] = useState({
     title: '',
+    description: '',
     documentDate: new Date().toISOString().split('T')[0],
     categoryId: '',
     keywords: '',
@@ -26,6 +30,29 @@ export default function UploadPage({ onNavigate }: { onNavigate: (page: string) 
   useEffect(() => {
     loadCategories();
   }, [profile]);
+
+  useEffect(() => {
+    if (formData.title.length > 3) {
+      const suggestions = suggestKeywords(
+        formData.title,
+        formData.keywords.split(',').map((k) => k.trim()).filter(Boolean)
+      );
+      setAiSuggestions(suggestions);
+
+      const suggestedCatId = suggestCategory(
+        formData.title,
+        categories.map((c) => ({ id: c.id, name: c.name }))
+      );
+      if (suggestedCatId && !formData.categoryId) {
+        setFormData((prev) => ({ ...prev, categoryId: suggestedCatId }));
+      }
+
+      setShowAiPanel(suggestions.length > 0);
+    } else {
+      setAiSuggestions([]);
+      setShowAiPanel(false);
+    }
+  }, [formData.title, categories]);
 
   const loadCategories = async () => {
     if (!profile?.organization_id) return;
@@ -39,7 +66,7 @@ export default function UploadPage({ onNavigate }: { onNavigate: (page: string) 
     if (data) {
       setCategories(data);
       if (data.length > 0 && !formData.categoryId) {
-        setFormData(prev => ({ ...prev, categoryId: data[0].id }));
+        setFormData((prev) => ({ ...prev, categoryId: data[0].id }));
       }
     }
   };
@@ -70,7 +97,20 @@ export default function UploadPage({ onNavigate }: { onNavigate: (page: string) 
 
     if (!formData.title) {
       const titleFromFile = selectedFile.name.replace(/\.[^/.]+$/, '');
-      setFormData(prev => ({ ...prev, title: titleFromFile }));
+      setFormData((prev) => ({ ...prev, title: titleFromFile }));
+    }
+  };
+
+  const addSuggestedKeyword = (keyword: string) => {
+    const existing = formData.keywords
+      .split(',')
+      .map((k) => k.trim())
+      .filter(Boolean);
+
+    if (!existing.includes(keyword)) {
+      const newKeywords = [...existing, keyword].join(', ');
+      setFormData((prev) => ({ ...prev, keywords: newKeywords }));
+      setAiSuggestions((prev) => prev.filter((s) => s !== keyword));
     }
   };
 
@@ -78,7 +118,7 @@ export default function UploadPage({ onNavigate }: { onNavigate: (page: string) 
     e.preventDefault();
 
     if (!file || !profile?.organization_id) {
-      setError('Veuillez sélectionner un fichier');
+      setError('Veuillez selectionner un fichier');
       return;
     }
 
@@ -96,23 +136,25 @@ export default function UploadPage({ onNavigate }: { onNavigate: (page: string) 
 
       if (uploadError) throw uploadError;
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('documents')
-        .getPublicUrl(filePath);
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from('documents').getPublicUrl(filePath);
 
       const keywordsArray = formData.keywords
         .split(',')
-        .map(k => k.trim())
-        .filter(k => k.length > 0);
+        .map((k) => k.trim())
+        .filter((k) => k.length > 0);
 
       const { error: dbError } = await supabase.from('documents').insert({
         organization_id: profile.organization_id,
         title: formData.title,
+        description: formData.description,
         file_url: publicUrl,
         file_type: fileExt || 'unknown',
         document_date: formData.documentDate,
         category_id: formData.categoryId || null,
         keywords: keywordsArray,
+        ai_keywords: aiSuggestions,
         uploaded_by: profile.id,
         is_important: formData.isImportant,
       });
@@ -122,7 +164,7 @@ export default function UploadPage({ onNavigate }: { onNavigate: (page: string) 
       await supabase.from('activity_logs').insert({
         organization_id: profile.organization_id,
         user_id: profile.id,
-        action: 'Document ajouté',
+        action: 'document.upload',
         details: { title: formData.title },
       });
 
@@ -132,7 +174,7 @@ export default function UploadPage({ onNavigate }: { onNavigate: (page: string) 
       }, 2000);
     } catch (err) {
       console.error('Upload error:', err);
-      setError(err instanceof Error ? err.message : 'Erreur lors de l\'upload');
+      setError(err instanceof Error ? err.message : "Erreur lors de l'upload");
     } finally {
       setUploading(false);
     }
@@ -145,7 +187,7 @@ export default function UploadPage({ onNavigate }: { onNavigate: (page: string) 
           <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <Check className="w-8 h-8 text-emerald-600" />
           </div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">Document Archivé</h2>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">Document Archive</h2>
           <p className="text-slate-600">Redirection en cours...</p>
         </div>
       </div>
@@ -156,7 +198,7 @@ export default function UploadPage({ onNavigate }: { onNavigate: (page: string) 
     <div className="max-w-2xl mx-auto">
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-slate-900 mb-1">Nouveau Document</h2>
-        <p className="text-slate-600">Ajoutez un document à vos archives</p>
+        <p className="text-slate-600">Ajoutez un document a vos archives</p>
       </div>
 
       {error && (
@@ -201,9 +243,7 @@ export default function UploadPage({ onNavigate }: { onNavigate: (page: string) 
                   <Upload className="w-8 h-8 text-slate-600" />
                 </div>
                 <div>
-                  <p className="font-medium text-slate-900 mb-1">
-                    Glissez-déposez votre fichier ici
-                  </p>
+                  <p className="font-medium text-slate-900 mb-1">Glissez-deposez votre fichier ici</p>
                   <p className="text-sm text-slate-600">ou</p>
                 </div>
                 <label className="inline-block">
@@ -211,15 +251,13 @@ export default function UploadPage({ onNavigate }: { onNavigate: (page: string) 
                     type="file"
                     onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
                     className="hidden"
-                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx"
                   />
                   <span className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg cursor-pointer inline-block transition-colors">
                     Choisir un fichier
                   </span>
                 </label>
-                <p className="text-xs text-slate-500">
-                  PDF, Word, Images (max 10 MB)
-                </p>
+                <p className="text-xs text-slate-500">PDF, Word, Excel, Images (max 10 MB)</p>
               </div>
             )}
           </div>
@@ -246,40 +284,55 @@ export default function UploadPage({ onNavigate }: { onNavigate: (page: string) 
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                <Calendar className="w-4 h-4 inline mr-1" />
-                Date du document
+                Description (optionnel)
               </label>
-              <input
-                type="date"
-                required
-                value={formData.documentDate}
-                onChange={(e) => setFormData({ ...formData, documentDate: e.target.value })}
-                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Decrivez brievement le contenu du document..."
+                rows={2}
+                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none"
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                <FolderOpen className="w-4 h-4 inline mr-1" />
-                Catégorie
-              </label>
-              <select
-                value={formData.categoryId}
-                onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-              >
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <Calendar className="w-4 h-4 inline mr-1" />
+                  Date du document
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={formData.documentDate}
+                  onChange={(e) => setFormData({ ...formData, documentDate: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <FolderOpen className="w-4 h-4 inline mr-1" />
+                  Categorie
+                </label>
+                <select
+                  value={formData.categoryId}
+                  onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                >
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 <Tag className="w-4 h-4 inline mr-1" />
-                Mots-clés (séparés par des virgules)
+                Mots-cles (separes par des virgules)
               </label>
               <input
                 type="text"
@@ -288,10 +341,32 @@ export default function UploadPage({ onNavigate }: { onNavigate: (page: string) 
                 placeholder="Ex: budget, finance, 2024"
                 className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               />
-              <p className="text-xs text-slate-500 mt-1">
-                Les mots-clés aident à retrouver le document plus facilement
-              </p>
             </div>
+
+            {showAiPanel && aiSuggestions.length > 0 && (
+              <div className="bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Sparkles className="w-4 h-4 text-blue-600" />
+                  <span className="text-sm font-semibold text-blue-800">Suggestions IA</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {aiSuggestions.map((kw) => (
+                    <button
+                      key={kw}
+                      type="button"
+                      onClick={() => addSuggestedKeyword(kw)}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-white border border-blue-200 rounded-full text-sm text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition-colors"
+                    >
+                      <Plus className="w-3 h-3" />
+                      {kw}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-blue-600 mt-2">
+                  Cliquez pour ajouter un mot-cle suggere
+                </p>
+              </div>
+            )}
 
             <div className="flex items-center gap-3">
               <input

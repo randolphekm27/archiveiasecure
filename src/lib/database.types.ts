@@ -104,13 +104,17 @@ export interface Database {
           id: string
           organization_id: string
           title: string
+          description: string
           file_url: string
           file_type: string
           document_date: string
           category_id: string | null
           keywords: string[]
+          ai_keywords: string[]
+          ai_category_suggestion: string
           uploaded_by: string
           is_important: boolean
+          views_count: number
           created_at: string
           updated_at: string
         }
@@ -118,13 +122,17 @@ export interface Database {
           id?: string
           organization_id: string
           title: string
+          description?: string
           file_url: string
           file_type: string
           document_date?: string
           category_id?: string | null
           keywords?: string[]
+          ai_keywords?: string[]
+          ai_category_suggestion?: string
           uploaded_by: string
           is_important?: boolean
+          views_count?: number
           created_at?: string
           updated_at?: string
         }
@@ -132,13 +140,17 @@ export interface Database {
           id?: string
           organization_id?: string
           title?: string
+          description?: string
           file_url?: string
           file_type?: string
           document_date?: string
           category_id?: string | null
           keywords?: string[]
+          ai_keywords?: string[]
+          ai_category_suggestion?: string
           uploaded_by?: string
           is_important?: boolean
+          views_count?: number
           created_at?: string
           updated_at?: string
         }
@@ -315,6 +327,41 @@ export interface Database {
           deleted_by?: string
           expires_at?: string
           restored_at?: string | null
+          created_at?: string
+        }
+      }
+      notifications: {
+        Row: {
+          id: string
+          organization_id: string
+          user_id: string
+          title: string
+          message: string
+          type: 'info' | 'warning' | 'success' | 'deletion'
+          is_read: boolean
+          link_to: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          user_id: string
+          title: string
+          message?: string
+          type?: 'info' | 'warning' | 'success' | 'deletion'
+          is_read?: boolean
+          link_to?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          user_id?: string
+          title?: string
+          message?: string
+          type?: 'info' | 'warning' | 'success' | 'deletion'
+          is_read?: boolean
+          link_to?: string
           created_at?: string
         }
       }

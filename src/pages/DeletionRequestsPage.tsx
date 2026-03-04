@@ -7,8 +7,9 @@ import {
   FileText,
   Clock,
   User,
-  MessageSquare,
   AlertTriangle,
+  Users,
+  Zap,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -30,9 +31,9 @@ export default function DeletionRequestsPage() {
   const { profile } = useAuth();
   const [requests, setRequests] = useState<RequestWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
-  const [voteComment, setVoteComment] = useState('');
-  const [activeVoteRequest, setActiveVoteRequest] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [adminCount, setAdminCount] = useState(0);
+  const [voteComments, setVoteComments] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState<string | null>(null);
   const [filter, setFilter] = useState<'pending' | 'all'>('pending');
 
   useEffect(() => {
@@ -43,32 +44,38 @@ export default function DeletionRequestsPage() {
     if (!profile?.organization_id) return;
 
     try {
-      let query = supabase
-        .from('deletion_requests')
-        .select('*')
-        .eq('organization_id', profile.organization_id)
-        .order('created_at', { ascending: false });
-
-      if (filter === 'pending') {
-        query = query.in('status', ['pending', 'info_requested']);
-      }
-
-      const { data: reqData } = await query;
-      if (!reqData) return;
-
-      const [{ data: users }, { data: docs }, { data: votes }] = await Promise.all([
+      const [reqResult, usersResult, docsResult, votesResult] = await Promise.all([
+        (() => {
+          let query = supabase
+            .from('deletion_requests')
+            .select('*')
+            .eq('organization_id', profile.organization_id)
+            .order('created_at', { ascending: false });
+          if (filter === 'pending') {
+            query = query.in('status', ['pending', 'info_requested']);
+          }
+          return query;
+        })(),
         supabase.from('users').select('*').eq('organization_id', profile.organization_id),
         supabase.from('documents').select('*').eq('organization_id', profile.organization_id),
         supabase.from('deletion_votes').select('*'),
       ]);
 
+      const users = usersResult.data || [];
+      const docs = docsResult.data || [];
+      const votes = votesResult.data || [];
+      const reqData = reqResult.data || [];
+
+      const admins = users.filter((u) => u.role === 'admin');
+      setAdminCount(admins.length);
+
       const enriched: RequestWithDetails[] = reqData.map((req) => ({
         ...req,
-        document: docs?.find((d) => d.id === req.document_id),
-        requester: users?.find((u) => u.id === req.requested_by),
-        votes: (votes || [])
+        document: docs.find((d) => d.id === req.document_id),
+        requester: users.find((u) => u.id === req.requested_by),
+        votes: votes
           .filter((v) => v.deletion_request_id === req.id)
-          .map((v) => ({ ...v, voter: users?.find((u) => u.id === v.voter_id) })),
+          .map((v) => ({ ...v, voter: users.find((u) => u.id === v.voter_id) })),
       }));
 
       setRequests(enriched);
@@ -79,16 +86,24 @@ export default function DeletionRequestsPage() {
     }
   };
 
+  const getEffectiveVotesRequired = (request: RequestWithDetails) => {
+    if (adminCount <= 1) return 1;
+    if (adminCount === 2) return 2;
+    return Math.min(request.votes_required, adminCount);
+  };
+
   const handleVote = async (requestId: string, vote: 'approve' | 'reject' | 'info_needed') => {
     if (!profile) return;
-    setSubmitting(true);
+    setSubmitting(requestId);
 
     try {
+      const comment = voteComments[requestId] || null;
+
       const { error: voteError } = await supabase.from('deletion_votes').insert({
         deletion_request_id: requestId,
         voter_id: profile.id,
         vote,
-        comment: voteComment || null,
+        comment,
       });
 
       if (voteError) throw voteError;
@@ -97,76 +112,128 @@ export default function DeletionRequestsPage() {
         organizationId: profile.organization_id,
         userId: profile.id,
         action: 'document.delete_vote',
-        details: { request_id: requestId, vote, comment: voteComment },
+        details: { request_id: requestId, vote, comment },
       });
 
-      const request = requests.find((r) => r.id === requestId);
-      if (request) {
-        const { data: allVotes } = await supabase
-          .from('deletion_votes')
-          .select('*')
-          .eq('deletion_request_id', requestId);
+      await checkAndResolve(requestId);
 
-        if (allVotes) {
-          const approvals = allVotes.filter((v) => v.vote === 'approve').length;
-          const rejections = allVotes.filter((v) => v.vote === 'reject').length;
-          const infoNeeded = allVotes.filter((v) => v.vote === 'info_needed').length;
-
-          if (approvals >= request.votes_required) {
-            await supabase
-              .from('deletion_requests')
-              .update({ status: 'approved', resolved_at: new Date().toISOString() })
-              .eq('id', requestId);
-
-            if (request.document) {
-              await supabase.from('secure_trash').insert({
-                organization_id: profile.organization_id,
-                document_id: request.document_id,
-                document_data: request.document as any,
-                deletion_request_id: requestId,
-                deleted_by: profile.id,
-              });
-
-              await supabase.from('documents').delete().eq('id', request.document_id);
-
-              await logActivity({
-                organizationId: profile.organization_id,
-                userId: profile.id,
-                action: 'document.deleted',
-                documentId: request.document_id,
-                details: { title: request.document.title, via_request: requestId },
-              });
-            }
-          } else if (rejections > 0) {
-            await supabase
-              .from('deletion_requests')
-              .update({ status: 'rejected', resolved_at: new Date().toISOString() })
-              .eq('id', requestId);
-          } else if (infoNeeded > 0) {
-            await supabase
-              .from('deletion_requests')
-              .update({ status: 'info_requested' })
-              .eq('id', requestId);
-          }
-        }
-      }
-
-      setVoteComment('');
-      setActiveVoteRequest(null);
+      setVoteComments((prev) => ({ ...prev, [requestId]: '' }));
       await loadRequests();
     } catch (error) {
       console.error('Error casting vote:', error);
     } finally {
-      setSubmitting(false);
+      setSubmitting(null);
+    }
+  };
+
+  const checkAndResolve = async (requestId: string) => {
+    if (!profile) return;
+
+    const request = requests.find((r) => r.id === requestId);
+    if (!request) return;
+
+    const { data: allVotes } = await supabase
+      .from('deletion_votes')
+      .select('*')
+      .eq('deletion_request_id', requestId);
+
+    if (!allVotes) return;
+
+    const approvals = allVotes.filter((v) => v.vote === 'approve').length;
+    const rejections = allVotes.filter((v) => v.vote === 'reject').length;
+    const infoNeeded = allVotes.filter((v) => v.vote === 'info_needed').length;
+    const required = getEffectiveVotesRequired(request);
+
+    if (approvals >= required) {
+      await supabase
+        .from('deletion_requests')
+        .update({ status: 'approved', resolved_at: new Date().toISOString() })
+        .eq('id', requestId);
+
+      if (request.document) {
+        await supabase.from('secure_trash').insert({
+          organization_id: profile.organization_id,
+          document_id: request.document_id,
+          document_data: request.document as any,
+          deletion_request_id: requestId,
+          deleted_by: profile.id,
+        });
+
+        await supabase.from('documents').delete().eq('id', request.document_id);
+
+        await logActivity({
+          organizationId: profile.organization_id,
+          userId: profile.id,
+          action: 'document.deleted',
+          documentId: request.document_id,
+          details: { title: request.document.title, via_request: requestId },
+        });
+      }
+    } else if (rejections > 0) {
+      await supabase
+        .from('deletion_requests')
+        .update({ status: 'rejected', resolved_at: new Date().toISOString() })
+        .eq('id', requestId);
+    } else if (infoNeeded > 0) {
+      await supabase
+        .from('deletion_requests')
+        .update({ status: 'info_requested' })
+        .eq('id', requestId);
+    }
+  };
+
+  const handleAutoApprove = async (requestId: string) => {
+    if (!profile) return;
+    setSubmitting(requestId);
+
+    try {
+      const request = requests.find((r) => r.id === requestId);
+      if (!request) return;
+
+      const { error: voteError } = await supabase.from('deletion_votes').insert({
+        deletion_request_id: requestId,
+        voter_id: profile.id,
+        vote: 'approve',
+        comment: 'Auto-approuve (administrateur unique)',
+      });
+
+      if (voteError) throw voteError;
+
+      await supabase
+        .from('deletion_requests')
+        .update({ status: 'approved', resolved_at: new Date().toISOString() })
+        .eq('id', requestId);
+
+      if (request.document) {
+        await supabase.from('secure_trash').insert({
+          organization_id: profile.organization_id,
+          document_id: request.document_id,
+          document_data: request.document as any,
+          deletion_request_id: requestId,
+          deleted_by: profile.id,
+        });
+
+        await supabase.from('documents').delete().eq('id', request.document_id);
+
+        await logActivity({
+          organizationId: profile.organization_id,
+          userId: profile.id,
+          action: 'document.deleted',
+          documentId: request.document_id,
+          details: { title: request.document.title, via_request: requestId, auto_approved: true },
+        });
+      }
+
+      await loadRequests();
+    } catch (error) {
+      console.error('Error auto-approving:', error);
+    } finally {
+      setSubmitting(null);
     }
   };
 
   const hasVoted = (request: RequestWithDetails) => {
     return request.votes.some((v) => v.voter_id === profile?.id);
-  };
-
-  const isOwnRequest = (request: RequestWithDetails) => {
-    return request.requested_by === profile?.id;
   };
 
   const getStatusBadge = (status: string) => {
@@ -182,6 +249,15 @@ export default function DeletionRequestsPage() {
       default:
         return { label: status, bg: 'bg-slate-100', text: 'text-slate-700' };
     }
+  };
+
+  const canVote = (request: RequestWithDetails) => {
+    return (
+      profile?.role === 'admin' &&
+      request.status !== 'approved' &&
+      request.status !== 'rejected' &&
+      !hasVoted(request)
+    );
   };
 
   if (loading) {
@@ -201,23 +277,32 @@ export default function DeletionRequestsPage() {
             Validation collective avant suppression de documents
           </p>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setFilter('pending')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              filter === 'pending' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            En attente
-          </button>
-          <button
-            onClick={() => setFilter('all')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              filter === 'all' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            Toutes
-          </button>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 rounded-lg text-sm text-slate-600">
+            <Users className="w-4 h-4" />
+            {adminCount} admin{adminCount > 1 ? 's' : ''}
+            {adminCount <= 1 && (
+              <span className="text-xs text-amber-600 font-medium ml-1">(auto-approbation)</span>
+            )}
+          </div>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setFilter('pending')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm ${
+                filter === 'pending' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              En attente
+            </button>
+            <button
+              onClick={() => setFilter('all')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm ${
+                filter === 'all' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              Toutes
+            </button>
+          </div>
         </div>
       </div>
 
@@ -236,6 +321,10 @@ export default function DeletionRequestsPage() {
           {requests.map((request) => {
             const status = getStatusBadge(request.status);
             const approvals = request.votes.filter((v) => v.vote === 'approve').length;
+            const effectiveRequired = getEffectiveVotesRequired(request);
+            const isSingleAdmin = adminCount <= 1;
+            const showVotePanel = canVote(request);
+
             return (
               <div key={request.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="p-6">
@@ -298,13 +387,13 @@ export default function DeletionRequestsPage() {
                         ))}
                       </div>
                       <span className="text-sm text-slate-600">
-                        {approvals}/{request.votes_required} approbations
+                        {approvals}/{effectiveRequired} approbation{effectiveRequired > 1 ? 's' : ''}
                       </span>
                     </div>
                     <div className="h-2 flex-1 bg-slate-200 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-green-500 rounded-full transition-all"
-                        style={{ width: `${(approvals / request.votes_required) * 100}%` }}
+                        style={{ width: `${Math.min((approvals / effectiveRequired) * 100, 100)}%` }}
                       />
                     </div>
                   </div>
@@ -344,69 +433,90 @@ export default function DeletionRequestsPage() {
                     </div>
                   )}
 
-                  {request.status !== 'approved' &&
-                    request.status !== 'rejected' &&
-                    !hasVoted(request) &&
-                    !isOwnRequest(request) && (
-                      <div className="border-t border-slate-200 pt-4">
-                        {activeVoteRequest === request.id ? (
-                          <div className="space-y-3">
-                            <textarea
-                              value={voteComment}
-                              onChange={(e) => setVoteComment(e.target.value)}
-                              placeholder="Commentaire (optionnel)"
-                              rows={2}
-                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none text-sm"
-                            />
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => handleVote(request.id, 'approve')}
-                                disabled={submitting}
-                                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                              >
-                                <CheckCircle className="w-4 h-4" />
-                                Approuver
-                              </button>
-                              <button
-                                onClick={() => handleVote(request.id, 'reject')}
-                                disabled={submitting}
-                                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                              >
-                                <XCircle className="w-4 h-4" />
-                                Refuser
-                              </button>
-                              <button
-                                onClick={() => handleVote(request.id, 'info_needed')}
-                                disabled={submitting}
-                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                              >
-                                <HelpCircle className="w-4 h-4" />
-                                Demander info
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveVoteRequest(null);
-                                  setVoteComment('');
-                                }}
-                                className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50"
-                              >
-                                Annuler
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setActiveVoteRequest(request.id)}
-                            className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
-                          >
-                            <MessageSquare className="w-4 h-4" />
-                            Voter sur cette demande
-                          </button>
-                        )}
+                  {showVotePanel && isSingleAdmin && (
+                    <div className="border-t border-slate-200 pt-4">
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-3">
+                        <div className="flex items-center gap-2 text-amber-700 text-sm font-medium mb-1">
+                          <Zap className="w-4 h-4" />
+                          Vous etes le seul administrateur
+                        </div>
+                        <p className="text-sm text-amber-600">
+                          La suppression sera executee immediatement apres votre approbation.
+                        </p>
                       </div>
-                    )}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleAutoApprove(request.id)}
+                          disabled={submitting === request.id}
+                          className="flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          {submitting === request.id ? 'Traitement...' : 'Approuver et supprimer'}
+                        </button>
+                        <button
+                          onClick={() => handleVote(request.id, 'reject')}
+                          disabled={submitting === request.id}
+                          className="flex items-center gap-2 px-5 py-2.5 border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors disabled:opacity-50"
+                        >
+                          <XCircle className="w-4 h-4" />
+                          Refuser
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
-                  {isOwnRequest(request) && request.status === 'pending' && (
+                  {showVotePanel && !isSingleAdmin && (
+                    <div className="border-t border-slate-200 pt-4">
+                      <div className="mb-3">
+                        <textarea
+                          value={voteComments[request.id] || ''}
+                          onChange={(e) =>
+                            setVoteComments((prev) => ({ ...prev, [request.id]: e.target.value }))
+                          }
+                          placeholder="Commentaire (optionnel)"
+                          rows={2}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none text-sm"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleVote(request.id, 'approve')}
+                          disabled={submitting === request.id}
+                          className="flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          Approuver
+                        </button>
+                        <button
+                          onClick={() => handleVote(request.id, 'reject')}
+                          disabled={submitting === request.id}
+                          className="flex items-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                        >
+                          <XCircle className="w-4 h-4" />
+                          Refuser
+                        </button>
+                        <button
+                          onClick={() => handleVote(request.id, 'info_needed')}
+                          disabled={submitting === request.id}
+                          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                        >
+                          <HelpCircle className="w-4 h-4" />
+                          Demander info
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {hasVoted(request) && request.status === 'pending' && (
+                    <div className="border-t border-slate-200 pt-4">
+                      <div className="flex items-center gap-2 text-sm text-emerald-600">
+                        <CheckCircle className="w-4 h-4" />
+                        <span>Vous avez deja vote - en attente des autres administrateurs</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {request.requested_by === profile?.id && !hasVoted(request) && request.status === 'pending' && !isSingleAdmin && (
                     <div className="border-t border-slate-200 pt-4">
                       <div className="flex items-center gap-2 text-sm text-amber-600">
                         <AlertTriangle className="w-4 h-4" />
