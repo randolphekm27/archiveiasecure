@@ -43,6 +43,9 @@ export interface Database {
           full_name: string
           role: 'admin' | 'editor' | 'reader'
           avatar_url: string | null
+          email: string | null
+          is_active: boolean
+          last_login: string | null
           created_at: string
         }
         Insert: {
@@ -52,6 +55,9 @@ export interface Database {
           full_name: string
           role?: 'admin' | 'editor' | 'reader'
           avatar_url?: string | null
+          email?: string | null
+          is_active?: boolean
+          last_login?: string | null
           created_at?: string
         }
         Update: {
@@ -61,6 +67,9 @@ export interface Database {
           full_name?: string
           role?: 'admin' | 'editor' | 'reader'
           avatar_url?: string | null
+          email?: string | null
+          is_active?: boolean
+          last_login?: string | null
           created_at?: string
         }
       }
@@ -142,6 +151,8 @@ export interface Database {
           action: string
           document_id: string | null
           details: Json | null
+          ip_address: string | null
+          user_agent: string | null
           created_at: string
         }
         Insert: {
@@ -151,6 +162,8 @@ export interface Database {
           action: string
           document_id?: string | null
           details?: Json | null
+          ip_address?: string | null
+          user_agent?: string | null
           created_at?: string
         }
         Update: {
@@ -160,6 +173,148 @@ export interface Database {
           action?: string
           document_id?: string | null
           details?: Json | null
+          ip_address?: string | null
+          user_agent?: string | null
+          created_at?: string
+        }
+      }
+      user_invitations: {
+        Row: {
+          id: string
+          organization_id: string
+          email: string
+          role: 'admin' | 'editor' | 'reader'
+          token: string
+          full_name: string | null
+          invited_by: string
+          accepted_at: string | null
+          expires_at: string
+          personal_message: string | null
+          category_ids: string[]
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          email: string
+          role?: 'admin' | 'editor' | 'reader'
+          token: string
+          full_name?: string | null
+          invited_by: string
+          accepted_at?: string | null
+          expires_at: string
+          personal_message?: string | null
+          category_ids?: string[]
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          email?: string
+          role?: 'admin' | 'editor' | 'reader'
+          token?: string
+          full_name?: string | null
+          invited_by?: string
+          accepted_at?: string | null
+          expires_at?: string
+          personal_message?: string | null
+          category_ids?: string[]
+          created_at?: string
+        }
+      }
+      deletion_requests: {
+        Row: {
+          id: string
+          organization_id: string
+          document_id: string
+          requested_by: string
+          reason: string
+          status: 'pending' | 'approved' | 'rejected' | 'info_requested'
+          votes_required: number
+          created_at: string
+          resolved_at: string | null
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          document_id: string
+          requested_by: string
+          reason?: string
+          status?: 'pending' | 'approved' | 'rejected' | 'info_requested'
+          votes_required?: number
+          created_at?: string
+          resolved_at?: string | null
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          document_id?: string
+          requested_by?: string
+          reason?: string
+          status?: 'pending' | 'approved' | 'rejected' | 'info_requested'
+          votes_required?: number
+          created_at?: string
+          resolved_at?: string | null
+        }
+      }
+      deletion_votes: {
+        Row: {
+          id: string
+          deletion_request_id: string
+          voter_id: string
+          vote: 'approve' | 'reject' | 'info_needed'
+          comment: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          deletion_request_id: string
+          voter_id: string
+          vote: 'approve' | 'reject' | 'info_needed'
+          comment?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          deletion_request_id?: string
+          voter_id?: string
+          vote?: 'approve' | 'reject' | 'info_needed'
+          comment?: string | null
+          created_at?: string
+        }
+      }
+      secure_trash: {
+        Row: {
+          id: string
+          organization_id: string
+          document_id: string
+          document_data: Json
+          deletion_request_id: string | null
+          deleted_by: string
+          expires_at: string
+          restored_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          document_id: string
+          document_data: Json
+          deletion_request_id?: string | null
+          deleted_by: string
+          expires_at?: string
+          restored_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          document_id?: string
+          document_data?: Json
+          deletion_request_id?: string | null
+          deleted_by?: string
+          expires_at?: string
+          restored_at?: string | null
           created_at?: string
         }
       }

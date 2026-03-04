@@ -1,11 +1,25 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Mail, AlertCircle, CheckCircle } from 'lucide-react';
+import { Building2, AlertCircle, CheckCircle, Shield, Lock, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import type { Database } from '../lib/database.types';
+import { logActivity } from '../lib/activityLogger';
 
-type Invitation = Database['public']['Tables']['user_invitations']['Row'];
-type Organization = Database['public']['Tables']['organizations']['Row'];
+interface InvitationData {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: string;
+  organization_id: string;
+  personal_message: string | null;
+  expires_at: string;
+}
+
+interface OrganizationData {
+  id: string;
+  code: string;
+  name: string;
+  logo_url: string | null;
+}
 
 export default function JoinPage() {
   const { token } = useParams<{ token: string }>();
@@ -15,13 +29,15 @@ export default function JoinPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  const [invitation, setInvitation] = useState<Invitation | null>(null);
-  const [organization, setOrganization] = useState<Organization | null>(null);
+  const [invitation, setInvitation] = useState<InvitationData | null>(null);
+  const [organization, setOrganization] = useState<OrganizationData | null>(null);
+  const [inviterName, setInviterName] = useState('');
 
   const [formData, setFormData] = useState({
     username: '',
     password: '',
     confirmPassword: '',
+    acceptTerms: false,
   });
 
   const [submitting, setSubmitting] = useState(false);
@@ -48,32 +64,30 @@ export default function JoinPage() {
       if (invError) throw invError;
 
       if (!inv) {
-        setError('Cette invitation est invalide ou a expiré');
+        setError('Cette invitation est invalide ou a deja ete utilisee');
         setLoading(false);
         return;
       }
 
       if (new Date(inv.expires_at) < new Date()) {
-        setError('Cette invitation a expiré');
+        setError('Cette invitation a expire. Demandez une nouvelle invitation a votre administrateur.');
         setLoading(false);
         return;
       }
 
       setInvitation(inv);
 
-      const { data: org, error: orgError } = await supabase
-        .from('organizations')
-        .select('*')
-        .eq('id', inv.organization_id)
-        .maybeSingle();
+      const [{ data: org }, { data: inviter }] = await Promise.all([
+        supabase.from('organizations').select('*').eq('id', inv.organization_id).maybeSingle(),
+        supabase.from('users').select('full_name').eq('id', inv.invited_by).maybeSingle(),
+      ]);
 
-      if (orgError) throw orgError;
-      if (!org) throw new Error('Organization not found');
-
+      if (!org) throw new Error('Organisation introuvable');
       setOrganization(org);
+      if (inviter) setInviterName(inviter.full_name);
     } catch (err) {
       console.error('Error loading invitation:', err);
-      setError('Erreur lors du chargement de l\'invitation');
+      setError("Erreur lors du chargement de l'invitation");
     } finally {
       setLoading(false);
     }
@@ -90,7 +104,12 @@ export default function JoinPage() {
     }
 
     if (formData.password.length < 6) {
-      setError('Le mot de passe doit contenir au moins 6 caractères');
+      setError('Le mot de passe doit contenir au moins 6 caracteres');
+      return;
+    }
+
+    if (!formData.acceptTerms) {
+      setError("Vous devez accepter les conditions d'utilisation");
       return;
     }
 
@@ -121,7 +140,7 @@ export default function JoinPage() {
           username: formData.username,
           full_name: invitation.full_name || '',
           email: invitation.email,
-          role: invitation.role,
+          role: invitation.role as any,
         });
 
         if (profileError) throw profileError;
@@ -133,20 +152,42 @@ export default function JoinPage() {
 
         if (updateError) throw updateError;
 
+        await logActivity({
+          organizationId: organization.id,
+          userId: authData.user.id,
+          action: 'user.joined',
+          details: {
+            full_name: invitation.full_name,
+            role: invitation.role,
+            invited_by: inviterName,
+          },
+        });
+
         setSuccess(true);
-        setTimeout(() => {
-          navigate('/dashboard');
-        }, 2000);
+        setTimeout(() => navigate('/'), 2000);
       }
     } catch (err) {
       console.error('Error accepting invitation:', err);
       if (err instanceof Error) {
-        setError(err.message);
+        if (err.message.includes('already registered')) {
+          setError('Un compte existe deja avec ce nom d\'utilisateur. Essayez un autre nom.');
+        } else {
+          setError(err.message);
+        }
       } else {
-        setError('Erreur lors de l\'acceptation de l\'invitation');
+        setError("Erreur lors de l'acceptation de l'invitation");
       }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const getRoleFr = (role: string) => {
+    switch (role) {
+      case 'admin': return 'Administrateur';
+      case 'editor': return 'Editeur';
+      case 'reader': return 'Lecteur';
+      default: return role;
     }
   };
 
@@ -162,112 +203,185 @@ export default function JoinPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
-      <div className="bg-white rounded-xl shadow-lg max-w-md w-full p-8">
-        <div className="text-center mb-8">
-          <Mail className="w-12 h-12 text-blue-600 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-slate-900">Rejoindre une organisation</h1>
-        </div>
-
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex gap-3">
-            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium text-red-900">Erreur</p>
-              <p className="text-sm text-red-700 mt-1">{error}</p>
-            </div>
-          </div>
-        )}
-
-        {success && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex gap-3">
-            <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium text-green-900">Succès!</p>
-              <p className="text-sm text-green-700 mt-1">Redirection en cours...</p>
-            </div>
-          </div>
-        )}
-
-        {!error && invitation && organization && !success && (
-          <>
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-slate-700 mb-2">
-                <strong>Bienvenue {invitation.full_name}!</strong>
-              </p>
-              <p className="text-sm text-slate-600">
-                Vous êtes invité à rejoindre <strong>{organization.name}</strong> en tant que <strong>{invitation.role === 'admin' ? 'Administrateur' : invitation.role === 'editor' ? 'Éditeur' : 'Lecteur'}</strong>.
-              </p>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Adresse email
-                </label>
-                <input
-                  type="email"
-                  disabled
-                  value={invitation.email}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-600"
-                />
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 p-4">
+      <div className="w-full max-w-md">
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+          <div className="bg-gradient-to-r from-slate-800 to-blue-700 px-8 py-8 text-center">
+            {organization?.logo_url ? (
+              <img
+                src={organization.logo_url}
+                alt=""
+                className="w-16 h-16 rounded-xl mx-auto mb-3 bg-white/10 object-cover"
+              />
+            ) : (
+              <div className="w-16 h-16 bg-white/10 rounded-xl flex items-center justify-center mx-auto mb-3">
+                <Building2 className="w-8 h-8 text-white" />
               </div>
+            )}
+            <h1 className="text-xl font-bold text-white">
+              {organization?.name || 'Organisation'}
+            </h1>
+            <p className="text-blue-200 text-sm mt-1">ArchivIA Pro</p>
+          </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Nom d'utilisateur
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.username}
-                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                  placeholder="Choisissez un nom d'utilisateur"
-                />
-                <p className="text-xs text-slate-500 mt-1">
-                  Vous utiliserez ce nom pour vous connecter
+          <div className="p-8">
+            {error && !success && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex gap-3">
+                <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-red-900">Erreur</p>
+                  <p className="text-sm text-red-700 mt-1">{error}</p>
+                </div>
+              </div>
+            )}
+
+            {success && (
+              <div className="text-center py-6">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle className="w-8 h-8 text-green-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">Compte active !</h3>
+                <p className="text-slate-600">Redirection vers votre espace...</p>
+              </div>
+            )}
+
+            {!success && invitation && organization && (
+              <>
+                <div className="mb-6 space-y-3">
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                    <p className="text-sm text-slate-800">
+                      <strong>{inviterName || 'Un administrateur'}</strong> vous invite a rejoindre{' '}
+                      <strong>{organization.name}</strong>.
+                    </p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <Shield className="w-4 h-4 text-blue-600" />
+                      <span className="text-sm font-medium text-blue-700">
+                        Role : {getRoleFr(invitation.role)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {invitation.personal_message && (
+                    <div className="bg-slate-50 border-l-4 border-blue-500 rounded-r-lg p-4">
+                      <p className="text-sm text-slate-700 italic">"{invitation.personal_message}"</p>
+                      <p className="text-xs text-slate-500 mt-1">- {inviterName}</p>
+                    </div>
+                  )}
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                      Nom complet
+                    </label>
+                    <input
+                      type="text"
+                      disabled
+                      value={invitation.full_name || ''}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                      Adresse email
+                    </label>
+                    <input
+                      type="email"
+                      disabled
+                      value={invitation.email}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                      Nom d'utilisateur
+                    </label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input
+                        type="text"
+                        required
+                        value={formData.username}
+                        onChange={(e) => setFormData({ ...formData, username: e.target.value.toLowerCase().replace(/\s/g, '') })}
+                        className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                        placeholder="Choisissez un identifiant"
+                      />
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Vous utiliserez ce nom et le code <strong>{organization.code}</strong> pour vous connecter
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                      Mot de passe
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input
+                        type="password"
+                        required
+                        value={formData.password}
+                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                        className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                        placeholder="Au moins 6 caracteres"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                      Confirmer le mot de passe
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input
+                        type="password"
+                        required
+                        value={formData.confirmPassword}
+                        onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                        className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                        placeholder="Confirmez votre mot de passe"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-lg">
+                    <input
+                      type="checkbox"
+                      id="terms"
+                      checked={formData.acceptTerms}
+                      onChange={(e) => setFormData({ ...formData, acceptTerms: e.target.checked })}
+                      className="mt-0.5 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <label htmlFor="terms" className="text-sm text-slate-600">
+                      J'accepte les conditions d'utilisation d'ArchivIA Pro et je m'engage a respecter la
+                      confidentialite des documents de l'organisation.
+                    </label>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white py-3 rounded-lg font-semibold transition-colors text-base"
+                  >
+                    {submitting ? 'Activation...' : 'Activer mon compte'}
+                  </button>
+                </form>
+              </>
+            )}
+
+            {!invitation && !loading && error && (
+              <div className="text-center py-4">
+                <p className="text-sm text-slate-500">
+                  Si vous avez deja un compte, connectez-vous depuis la page de connexion.
                 </p>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Mot de passe
-                </label>
-                <input
-                  type="password"
-                  required
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                  placeholder="Au moins 6 caractères"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Confirmer le mot de passe
-                </label>
-                <input
-                  type="password"
-                  required
-                  value={formData.confirmPassword}
-                  onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                  placeholder="Confirmez votre mot de passe"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white py-2 rounded-lg font-medium transition-colors"
-              >
-                {submitting ? 'Traitement...' : 'Accepter l\'invitation'}
-              </button>
-            </form>
-          </>
-        )}
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

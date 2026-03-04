@@ -1,28 +1,117 @@
-import { User, Building2, Shield, Calendar } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import {
+  User,
+  Building2,
+  Shield,
+  Calendar,
+  Activity,
+  FileText,
+  Clock,
+  Eye,
+  Upload,
+  Search,
+  Download,
+  UserPlus,
+  Settings,
+  FolderOpen,
+  Trash2,
+  RotateCcw,
+} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
+import { getActionInfo } from '../lib/activityLogger';
+import type { Database } from '../lib/database.types';
+
+type ActivityLog = Database['public']['Tables']['activity_logs']['Row'];
 
 export default function ProfilePage() {
   const { profile, organization } = useAuth();
+  const [personalLogs, setPersonalLogs] = useState<ActivityLog[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(true);
+
+  useEffect(() => {
+    if (profile) loadPersonalActivity();
+  }, [profile]);
+
+  const loadPersonalActivity = async () => {
+    if (!profile) return;
+
+    try {
+      const { data } = await supabase
+        .from('activity_logs')
+        .select('*')
+        .eq('user_id', profile.id)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (data) setPersonalLogs(data);
+    } catch (error) {
+      console.error('Error loading personal activity:', error);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  const getPermissions = () => {
+    const base = [
+      { icon: Eye, text: 'Consulter tous les documents', allowed: true },
+      { icon: Search, text: 'Recherche simple et avancee', allowed: true },
+      { icon: Download, text: 'Telecharger les documents', allowed: true },
+      { icon: User, text: 'Modifier son profil personnel', allowed: true },
+    ];
+
+    const editor = [
+      { icon: Upload, text: 'Scanner et ajouter des documents', allowed: profile?.role !== 'reader' },
+      { icon: FileText, text: 'Modifier les metadonnees des documents', allowed: profile?.role !== 'reader' },
+      { icon: FolderOpen, text: 'Creer des dossiers et organiser', allowed: profile?.role !== 'reader' },
+    ];
+
+    const admin = [
+      { icon: UserPlus, text: 'Inviter de nouveaux membres', allowed: profile?.role === 'admin' },
+      { icon: Shield, text: 'Definir les roles des utilisateurs', allowed: profile?.role === 'admin' },
+      { icon: Settings, text: 'Configurer les parametres', allowed: profile?.role === 'admin' },
+      { icon: Activity, text: "Voir le journal d'activite complet", allowed: profile?.role === 'admin' },
+      { icon: Trash2, text: 'Demander la suppression de documents', allowed: profile?.role === 'admin' },
+      { icon: RotateCcw, text: 'Restaurer des documents supprimes', allowed: profile?.role === 'admin' },
+    ];
+
+    return [...base, ...editor, ...admin].filter((p) => p.allowed);
+  };
+
+  const getRoleFr = () => {
+    switch (profile?.role) {
+      case 'admin': return 'Administrateur';
+      case 'editor': return 'Editeur';
+      default: return 'Lecteur';
+    }
+  };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-slate-900 mb-1">Mon Compte</h2>
-        <p className="text-slate-600">Informations personnelles</p>
+        <p className="text-slate-600">Informations personnelles et activite</p>
       </div>
 
       <div className="bg-white rounded-xl p-6 border border-slate-200">
         <div className="flex items-center gap-4 mb-6 pb-6 border-b border-slate-200">
           <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center">
-            <User className="w-10 h-10 text-blue-600" />
+            {profile?.avatar_url ? (
+              <img src={profile.avatar_url} alt="" className="w-20 h-20 rounded-full object-cover" />
+            ) : (
+              <span className="text-2xl font-bold text-blue-600">
+                {profile?.full_name?.charAt(0)}
+              </span>
+            )}
           </div>
           <div>
             <h3 className="text-xl font-semibold text-slate-900">{profile?.full_name}</h3>
             <p className="text-slate-600">@{profile?.username}</p>
+            {profile?.email && <p className="text-sm text-slate-500 mt-0.5">{profile.email}</p>}
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="p-4 bg-slate-50 rounded-lg">
             <div className="flex items-center gap-2 mb-1">
               <Building2 className="w-4 h-4 text-slate-600" />
@@ -35,67 +124,103 @@ export default function ProfilePage() {
           <div className="p-4 bg-slate-50 rounded-lg">
             <div className="flex items-center gap-2 mb-1">
               <Shield className="w-4 h-4 text-slate-600" />
-              <p className="text-sm text-slate-600">Rôle</p>
+              <p className="text-sm text-slate-600">Role</p>
             </div>
             <span
               className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${
                 profile?.role === 'admin'
-                  ? 'bg-purple-100 text-purple-700'
+                  ? 'bg-rose-100 text-rose-700'
                   : profile?.role === 'editor'
                   ? 'bg-blue-100 text-blue-700'
                   : 'bg-slate-100 text-slate-700'
               }`}
             >
-              {profile?.role === 'admin' ? 'Administrateur' : profile?.role === 'editor' ? 'Éditeur' : 'Lecteur'}
+              {getRoleFr()}
             </span>
           </div>
 
-          <div className="p-4 bg-slate-50 rounded-lg">
+          <div className="p-4 bg-slate-50 rounded-lg md:col-span-2">
             <div className="flex items-center gap-2 mb-1">
               <Calendar className="w-4 h-4 text-slate-600" />
               <p className="text-sm text-slate-600">Membre depuis</p>
             </div>
             <p className="font-medium text-slate-900">
-              {profile?.created_at && new Date(profile.created_at).toLocaleDateString('fr-FR', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-              })}
+              {profile?.created_at &&
+                new Date(profile.created_at).toLocaleDateString('fr-FR', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                })}
             </p>
           </div>
         </div>
       </div>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
-        <h3 className="font-semibold text-slate-900 mb-2">Autorisations</h3>
-        <ul className="space-y-2 text-sm text-slate-700">
-          <li className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
-            <span>Consulter tous les documents de l'organisation</span>
-          </li>
-          {profile?.role !== 'reader' && (
-            <li className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
-              <span>Ajouter et modifier des documents</span>
-            </li>
-          )}
-          {profile?.role === 'admin' && (
-            <>
-              <li className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
-                <span>Gérer les utilisateurs</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
-                <span>Gérer les catégories</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
-                <span>Supprimer des documents</span>
-              </li>
-            </>
-          )}
-        </ul>
+      <div className="bg-white rounded-xl p-6 border border-slate-200">
+        <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <Shield className="w-5 h-5 text-blue-600" />
+          Mes autorisations
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {getPermissions().map((perm, i) => {
+            const Icon = perm.icon;
+            return (
+              <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-slate-50">
+                <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Icon className="w-4 h-4 text-blue-600" />
+                </div>
+                <span className="text-sm text-slate-700">{perm.text}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl p-6 border border-slate-200">
+        <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <Activity className="w-5 h-5 text-blue-600" />
+          Mon activite recente
+        </h3>
+
+        {loadingLogs ? (
+          <div className="flex justify-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        ) : personalLogs.length === 0 ? (
+          <div className="text-center py-8 text-slate-500">
+            <Activity className="w-12 h-12 mx-auto mb-2 opacity-30" />
+            <p>Aucune activite enregistree</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {personalLogs.map((log) => {
+              const actionInfo = getActionInfo(log.action);
+              return (
+                <div
+                  key={log.id}
+                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  <div
+                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: actionInfo.color }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm text-slate-900">{actionInfo.label}</span>
+                  </div>
+                  <span className="text-xs text-slate-500 flex items-center gap-1 flex-shrink-0">
+                    <Clock className="w-3 h-3" />
+                    {new Date(log.created_at).toLocaleDateString('fr-FR', {
+                      day: 'numeric',
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import {
   Home,
   FileText,
@@ -9,28 +9,57 @@ import {
   LogOut,
   Building2,
   Menu,
-  X
+  X,
+  Activity,
+  ShieldAlert,
+  Trash2,
+  Bell,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
+
+type PageId = 'dashboard' | 'documents' | 'upload' | 'search' | 'admin' | 'profile' | 'activity' | 'deletion-requests' | 'secure-trash';
 
 interface LayoutProps {
   children: ReactNode;
-  currentPage: 'dashboard' | 'documents' | 'upload' | 'search' | 'admin' | 'profile';
+  currentPage: PageId;
   onNavigate: (page: string) => void;
 }
 
 export default function Layout({ children, currentPage, onNavigate }: LayoutProps) {
   const { profile, organization, signOut } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [pendingDeletions, setPendingDeletions] = useState(0);
+
+  useEffect(() => {
+    if (profile?.role === 'admin') loadPendingDeletions();
+  }, [profile]);
+
+  const loadPendingDeletions = async () => {
+    if (!profile?.organization_id) return;
+    const { count } = await supabase
+      .from('deletion_requests')
+      .select('*', { count: 'exact', head: true })
+      .eq('organization_id', profile.organization_id)
+      .in('status', ['pending', 'info_requested']);
+
+    setPendingDeletions(count || 0);
+  };
+
+  const isAdmin = profile?.role === 'admin';
+  const canUpload = profile?.role !== 'reader';
 
   const menuItems = [
-    { id: 'dashboard', label: 'Tableau de bord', icon: Home },
-    { id: 'documents', label: 'Mes Documents', icon: FileText },
-    { id: 'upload', label: 'Nouveau Document', icon: Upload },
-    { id: 'search', label: 'Recherche Avancée', icon: Search },
-    ...(profile?.role === 'admin' ? [{ id: 'admin', label: 'Administration', icon: Settings }] : []),
-    { id: 'profile', label: 'Mon Compte', icon: User },
-  ];
+    { id: 'dashboard', label: 'Tableau de bord', icon: Home, show: true, badge: 0 },
+    { id: 'documents', label: 'Mes Documents', icon: FileText, show: true, badge: 0 },
+    { id: 'upload', label: 'Nouveau Document', icon: Upload, show: canUpload, badge: 0 },
+    { id: 'search', label: 'Recherche', icon: Search, show: true, badge: 0 },
+    { id: 'deletion-requests', label: 'Suppressions', icon: ShieldAlert, show: isAdmin, badge: pendingDeletions },
+    { id: 'secure-trash', label: 'Corbeille', icon: Trash2, show: isAdmin, badge: 0 },
+    { id: 'activity', label: 'Journal', icon: Activity, show: isAdmin, badge: 0 },
+    { id: 'admin', label: 'Administration', icon: Settings, show: isAdmin, badge: 0 },
+    { id: 'profile', label: 'Mon Compte', icon: User, show: true, badge: 0 },
+  ].filter((item) => item.show);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -61,17 +90,32 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
             </div>
 
             <div className="flex items-center gap-4">
+              {isAdmin && pendingDeletions > 0 && (
+                <button
+                  onClick={() => onNavigate('deletion-requests')}
+                  className="relative p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <Bell className="w-5 h-5 text-slate-600" />
+                  <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                    {pendingDeletions}
+                  </span>
+                </button>
+              )}
               <div className="hidden md:flex items-center gap-2 bg-slate-100 rounded-lg px-3 py-2">
                 <User className="w-4 h-4 text-slate-600" />
                 <span className="text-sm font-medium text-slate-700">{profile?.full_name}</span>
-                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
-                  {profile?.role === 'admin' ? 'Admin' : profile?.role === 'editor' ? 'Éditeur' : 'Lecteur'}
+                <span className={`text-xs px-2 py-0.5 rounded ${
+                  profile?.role === 'admin' ? 'bg-rose-100 text-rose-700' :
+                  profile?.role === 'editor' ? 'bg-blue-100 text-blue-700' :
+                  'bg-slate-200 text-slate-700'
+                }`}>
+                  {profile?.role === 'admin' ? 'Admin' : profile?.role === 'editor' ? 'Editeur' : 'Lecteur'}
                 </span>
               </div>
               <button
                 onClick={() => signOut()}
                 className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                title="Se déconnecter"
+                title="Se deconnecter"
               >
                 <LogOut className="w-5 h-5 text-slate-600" />
               </button>
@@ -102,7 +146,7 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
                     }}
                     className={`
                       w-full flex items-center gap-3 px-4 py-3 rounded-lg
-                      transition-all font-medium
+                      transition-all font-medium relative
                       ${isActive
                         ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
                         : 'text-slate-700 hover:bg-slate-100'
@@ -110,7 +154,14 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
                     `}
                   >
                     <Icon className="w-5 h-5" />
-                    <span>{item.label}</span>
+                    <span className="flex-1 text-left">{item.label}</span>
+                    {item.badge > 0 && (
+                      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                        isActive ? 'bg-white text-blue-600' : 'bg-red-500 text-white'
+                      }`}>
+                        {item.badge}
+                      </span>
+                    )}
                   </button>
                 );
               })}

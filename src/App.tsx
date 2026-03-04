@@ -10,6 +10,9 @@ import UploadPage from './pages/UploadPage';
 import SearchPage from './pages/SearchPage';
 import AdminPage from './pages/AdminPage';
 import ProfilePage from './pages/ProfilePage';
+import DeletionRequestsPage from './pages/DeletionRequestsPage';
+import SecureTrashPage from './pages/SecureTrashPage';
+import ActivityLogPage from './pages/ActivityLogPage';
 
 function AppRoutes() {
   const { user, loading } = useAuth();
@@ -40,6 +43,12 @@ function AppRoutes() {
         return <AdminPage />;
       case 'profile':
         return <ProfilePage />;
+      case 'deletion-requests':
+        return <DeletionRequestsPage />;
+      case 'secure-trash':
+        return <SecureTrashPage />;
+      case 'activity':
+        return <ActivityLogPage />;
       default:
         return <DashboardPage onNavigate={setCurrentPage} />;
     }

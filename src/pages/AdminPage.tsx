@@ -1,16 +1,30 @@
 import { useState, useEffect } from 'react';
-import { Users, FolderOpen, Building2, Plus, Trash2, CreditCard as Edit2, X, Check, UserPlus } from 'lucide-react';
+import {
+  Users,
+  FolderOpen,
+  Building2,
+  Plus,
+  Trash2,
+  X,
+  UserPlus,
+  Mail,
+  Copy,
+  Check,
+  MessageSquare,
+  Shield,
+} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import { logActivity } from '../lib/activityLogger';
 import type { Database } from '../lib/database.types';
 
-type User = Database['public']['Tables']['users']['Row'];
+type UserRow = Database['public']['Tables']['users']['Row'];
 type Category = Database['public']['Tables']['categories']['Row'];
 
 export default function AdminPage() {
   const { profile, organization } = useAuth();
   const [activeTab, setActiveTab] = useState<'users' | 'categories' | 'org'>('users');
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserRow[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -21,6 +35,8 @@ export default function AdminPage() {
     fullName: '',
     email: '',
     role: 'reader' as 'admin' | 'editor' | 'reader',
+    personalMessage: '',
+    categoryIds: [] as string[],
   });
 
   const [newCategory, setNewCategory] = useState({
@@ -28,6 +44,14 @@ export default function AdminPage() {
     description: '',
     color: '#3B82F6',
   });
+
+  const [invitationResult, setInvitationResult] = useState<{
+    url: string;
+    emailSent: boolean;
+  } | null>(null);
+
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [submittingInvite, setSubmittingInvite] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -50,7 +74,7 @@ export default function AdminPage() {
           .from('categories')
           .select('*')
           .eq('organization_id', profile.organization_id)
-          .order('name')
+          .order('name'),
       ]);
 
       if (usersResult.data) setUsers(usersResult.data);
@@ -64,8 +88,9 @@ export default function AdminPage() {
 
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!profile?.organization_id || !organization) return;
+
+    setSubmittingInvite(true);
 
     try {
       const token = crypto.randomUUID();
@@ -80,69 +105,92 @@ export default function AdminPage() {
         token,
         invited_by: profile.id,
         expires_at: expiresAt.toISOString(),
+        personal_message: newUser.personalMessage || null,
+        category_ids: newUser.categoryIds,
       });
 
       if (inviteError) throw inviteError;
 
       const invitationUrl = `${window.location.origin}/join/${token}`;
 
+      await logActivity({
+        organizationId: profile.organization_id,
+        userId: profile.id,
+        action: 'user.invited',
+        details: {
+          email: newUser.email,
+          full_name: newUser.fullName,
+          role: newUser.role,
+        },
+      });
+
+      let emailSent = false;
+
       try {
-        const { data, error: functionError } = await supabase.functions.invoke('send-invitation', {
+        const { data } = await supabase.functions.invoke('send-invitation', {
           body: {
             to: newUser.email,
             fullName: newUser.fullName,
             organizationName: organization.name,
             invitationUrl,
             role: newUser.role,
+            inviterName: profile.full_name,
+            inviterEmail: profile.email,
+            personalMessage: newUser.personalMessage,
           },
         });
 
-        if (functionError) {
-          console.error('Error sending email:', functionError);
-          alert(`Invitation créée. Partagez ce lien avec l'utilisateur: ${invitationUrl}`);
-        } else {
-          console.log('Email function response:', data);
-          alert(`Invitation créée. Partagez ce lien avec l'utilisateur: ${invitationUrl}`);
-        }
+        emailSent = data?.emailSent === true;
       } catch (err) {
-        console.error('Error calling send-invitation function:', err);
-        alert(`Invitation créée. Partagez ce lien avec l'utilisateur: ${invitationUrl}`);
+        console.error('Error calling send-invitation:', err);
       }
 
-      await loadData();
-      setShowUserModal(false);
-      setNewUser({
-        fullName: '',
-        email: '',
-        role: 'reader',
-      });
+      setInvitationResult({ url: invitationUrl, emailSent });
     } catch (error) {
       console.error('Error inviting user:', error);
-      alert('Erreur lors de l\'envoi de l\'invitation');
+    } finally {
+      setSubmittingInvite(false);
     }
   };
 
+  const handleCopyLink = async (url: string) => {
+    await navigator.clipboard.writeText(url);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const closeInvitationModal = () => {
+    setShowUserModal(false);
+    setInvitationResult(null);
+    setNewUser({ fullName: '', email: '', role: 'reader', personalMessage: '', categoryIds: [] });
+    loadData();
+  };
+
   const handleDeleteUser = async (userId: string) => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) return;
+    if (!confirm('Confirmer la suppression de cet utilisateur ?')) return;
 
     try {
-      const { error } = await supabase
-        .from('users')
-        .delete()
-        .eq('id', userId);
-
+      const targetUser = users.find((u) => u.id === userId);
+      const { error } = await supabase.from('users').delete().eq('id', userId);
       if (error) throw error;
+
+      if (profile) {
+        await logActivity({
+          organizationId: profile.organization_id,
+          userId: profile.id,
+          action: 'user.deleted',
+          details: { deleted_user: targetUser?.full_name, deleted_role: targetUser?.role },
+        });
+      }
 
       await loadData();
     } catch (error) {
       console.error('Error deleting user:', error);
-      alert('Erreur lors de la suppression');
     }
   };
 
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!profile?.organization_id) return;
 
     try {
@@ -155,34 +203,77 @@ export default function AdminPage() {
 
       if (error) throw error;
 
+      await logActivity({
+        organizationId: profile.organization_id,
+        userId: profile.id,
+        action: 'category.created',
+        details: { name: newCategory.name },
+      });
+
       await loadData();
       setShowCategoryModal(false);
-      setNewCategory({
-        name: '',
-        description: '',
-        color: '#3B82F6',
-      });
+      setNewCategory({ name: '', description: '', color: '#3B82F6' });
     } catch (error) {
       console.error('Error adding category:', error);
-      alert('Erreur lors de l\'ajout de la catégorie');
     }
   };
 
   const handleDeleteCategory = async (categoryId: string) => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer cette catégorie ?')) return;
+    if (!confirm('Confirmer la suppression de cette categorie ?')) return;
 
     try {
-      const { error } = await supabase
-        .from('categories')
-        .delete()
-        .eq('id', categoryId);
-
+      const cat = categories.find((c) => c.id === categoryId);
+      const { error } = await supabase.from('categories').delete().eq('id', categoryId);
       if (error) throw error;
+
+      if (profile) {
+        await logActivity({
+          organizationId: profile.organization_id,
+          userId: profile.id,
+          action: 'category.deleted',
+          details: { name: cat?.name },
+        });
+      }
 
       await loadData();
     } catch (error) {
       console.error('Error deleting category:', error);
-      alert('Erreur lors de la suppression');
+    }
+  };
+
+  const handleRoleChange = async (userId: string, newRole: 'admin' | 'editor' | 'reader') => {
+    try {
+      const targetUser = users.find((u) => u.id === userId);
+      const { error } = await supabase.from('users').update({ role: newRole }).eq('id', userId);
+      if (error) throw error;
+
+      if (profile) {
+        await logActivity({
+          organizationId: profile.organization_id,
+          userId: profile.id,
+          action: 'user.role_changed',
+          details: {
+            target_user: targetUser?.full_name,
+            old_role: targetUser?.role,
+            new_role: newRole,
+          },
+        });
+      }
+
+      await loadData();
+    } catch (error) {
+      console.error('Error changing role:', error);
+    }
+  };
+
+  const getRoleBadge = (role: string) => {
+    switch (role) {
+      case 'admin':
+        return { label: 'Administrateur', bg: 'bg-rose-100', text: 'text-rose-700' };
+      case 'editor':
+        return { label: 'Editeur', bg: 'bg-blue-100', text: 'text-blue-700' };
+      default:
+        return { label: 'Lecteur', bg: 'bg-slate-100', text: 'text-slate-700' };
     }
   };
 
@@ -198,45 +289,33 @@ export default function AdminPage() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-slate-900 mb-1">Administration</h2>
-        <p className="text-slate-600">Gérez votre organisation</p>
+        <p className="text-slate-600">Gerez votre organisation</p>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="border-b border-slate-200">
           <div className="flex gap-1 p-1">
-            <button
-              onClick={() => setActiveTab('users')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${
-                activeTab === 'users'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-700 hover:bg-slate-100'
-              }`}
-            >
-              <Users className="w-5 h-5" />
-              <span>Utilisateurs</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('categories')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${
-                activeTab === 'categories'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-700 hover:bg-slate-100'
-              }`}
-            >
-              <FolderOpen className="w-5 h-5" />
-              <span>Catégories</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('org')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${
-                activeTab === 'org'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-700 hover:bg-slate-100'
-              }`}
-            >
-              <Building2 className="w-5 h-5" />
-              <span>Organisation</span>
-            </button>
+            {[
+              { id: 'users' as const, label: 'Utilisateurs', icon: Users },
+              { id: 'categories' as const, label: 'Categories', icon: FolderOpen },
+              { id: 'org' as const, label: 'Organisation', icon: Building2 },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${
+                    activeTab === tab.id
+                      ? 'bg-blue-600 text-white'
+                      : 'text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -252,48 +331,59 @@ export default function AdminPage() {
                   className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
                 >
                   <UserPlus className="w-4 h-4" />
-                  Inviter un utilisateur
+                  Inviter un membre
                 </button>
               </div>
 
               <div className="space-y-2">
-                {users.map((user) => (
-                  <div
-                    key={user.id}
-                    className="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                        <Users className="w-5 h-5 text-blue-600" />
+                {users.map((user) => {
+                  const badge = getRoleBadge(user.role);
+                  return (
+                    <div
+                      key={user.id}
+                      className="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                          {user.avatar_url ? (
+                            <img src={user.avatar_url} alt="" className="w-10 h-10 rounded-full object-cover" />
+                          ) : (
+                            <span className="font-bold text-blue-600">{user.full_name.charAt(0)}</span>
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-medium text-slate-900">{user.full_name}</p>
+                          <p className="text-sm text-slate-500">@{user.username}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-slate-900">{user.full_name}</p>
-                        <p className="text-sm text-slate-600">@{user.username}</p>
+                      <div className="flex items-center gap-3">
+                        {user.id !== profile?.id ? (
+                          <select
+                            value={user.role}
+                            onChange={(e) => handleRoleChange(user.id, e.target.value as any)}
+                            className={`px-3 py-1 rounded-full text-xs font-medium border-0 cursor-pointer ${badge.bg} ${badge.text}`}
+                          >
+                            <option value="reader">Lecteur</option>
+                            <option value="editor">Editeur</option>
+                            <option value="admin">Administrateur</option>
+                          </select>
+                        ) : (
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${badge.bg} ${badge.text}`}>
+                            {badge.label}
+                          </span>
+                        )}
+                        {user.id !== profile?.id && (
+                          <button
+                            onClick={() => handleDeleteUser(user.id)}
+                            className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-600" />
+                          </button>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          user.role === 'admin'
-                            ? 'bg-purple-100 text-purple-700'
-                            : user.role === 'editor'
-                            ? 'bg-blue-100 text-blue-700'
-                            : 'bg-slate-100 text-slate-700'
-                        }`}
-                      >
-                        {user.role === 'admin' ? 'Administrateur' : user.role === 'editor' ? 'Éditeur' : 'Lecteur'}
-                      </span>
-                      {user.id !== profile?.id && (
-                        <button
-                          onClick={() => handleDeleteUser(user.id)}
-                          className="p-2 hover:bg-red-50 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-600" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -302,14 +392,14 @@ export default function AdminPage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-slate-900">
-                  Catégories ({categories.length})
+                  Categories ({categories.length})
                 </h3>
                 <button
                   onClick={() => setShowCategoryModal(true)}
                   className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
                 >
                   <Plus className="w-4 h-4" />
-                  Ajouter une catégorie
+                  Ajouter une categorie
                 </button>
               </div>
 
@@ -347,30 +437,28 @@ export default function AdminPage() {
 
           {activeTab === 'org' && (
             <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">
-                  Informations de l'organisation
-                </h3>
-                <div className="space-y-4">
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-sm text-slate-600 mb-1">Nom de l'organisation</p>
-                    <p className="font-medium text-slate-900">{organization?.name}</p>
-                  </div>
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-sm text-slate-600 mb-1">Code organisation</p>
-                    <p className="font-mono font-medium text-slate-900">{organization?.code}</p>
-                  </div>
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-sm text-slate-600 mb-1">Email administrateur</p>
-                    <p className="font-medium text-slate-900">{organization?.admin_email}</p>
-                  </div>
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-sm text-slate-600 mb-1">Date de création</p>
-                    <p className="font-medium text-slate-900">
-                      {organization?.created_at && new Date(organization.created_at).toLocaleDateString('fr-FR')}
+              <h3 className="text-lg font-semibold text-slate-900">
+                Informations de l'organisation
+              </h3>
+              <div className="space-y-4">
+                {[
+                  { label: "Nom de l'organisation", value: organization?.name },
+                  { label: 'Code organisation', value: organization?.code, mono: true },
+                  { label: 'Email administrateur', value: organization?.admin_email },
+                  {
+                    label: 'Date de creation',
+                    value:
+                      organization?.created_at &&
+                      new Date(organization.created_at).toLocaleDateString('fr-FR'),
+                  },
+                ].map((item) => (
+                  <div key={item.label} className="p-4 bg-slate-50 rounded-lg">
+                    <p className="text-sm text-slate-600 mb-1">{item.label}</p>
+                    <p className={`font-medium text-slate-900 ${item.mono ? 'font-mono' : ''}`}>
+                      {item.value}
                     </p>
                   </div>
-                </div>
+                ))}
               </div>
             </div>
           )}
@@ -379,83 +467,171 @@ export default function AdminPage() {
 
       {showUserModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-900">Inviter un utilisateur</h3>
-              <button
-                onClick={() => setShowUserModal(false)}
-                className="p-2 hover:bg-slate-100 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+          <div className="bg-white rounded-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+            {invitationResult ? (
+              <div className="space-y-4">
+                <div className="text-center">
+                  <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <Mail className="w-7 h-7 text-green-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900">Invitation creee</h3>
+                  {invitationResult.emailSent ? (
+                    <p className="text-sm text-green-600 mt-1">
+                      Un email a ete envoye a {newUser.email}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-amber-600 mt-1">
+                      L'email n'a pas pu etre envoye. Partagez le lien ci-dessous manuellement.
+                    </p>
+                  )}
+                </div>
 
-            <form onSubmit={handleAddUser} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Nom complet
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newUser.fullName}
-                  onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
-                  placeholder="Prénom et nom"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                />
-              </div>
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <p className="text-sm font-medium text-slate-700 mb-2">Lien d'invitation :</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={invitationResult.url}
+                      className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm font-mono text-slate-600"
+                    />
+                    <button
+                      onClick={() => handleCopyLink(invitationResult.url)}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+                    >
+                      {copiedLink ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      {copiedLink ? 'Copie' : 'Copier'}
+                    </button>
+                  </div>
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Adresse email
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={newUser.email}
-                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                  placeholder="utilisateur@exemple.com"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Rôle
-                </label>
-                <select
-                  value={newUser.role}
-                  onChange={(e) => setNewUser({ ...newUser, role: e.target.value as any })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                >
-                  <option value="reader">Lecteur</option>
-                  <option value="editor">Éditeur</option>
-                  <option value="admin">Administrateur</option>
-                </select>
-              </div>
-
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-slate-700">
-                  Un email d'invitation sera envoyé à cette adresse avec un lien pour créer son compte.
-                </p>
-              </div>
-
-              <div className="flex gap-3 pt-2">
                 <button
-                  type="submit"
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-medium transition-colors"
+                  onClick={closeInvitationModal}
+                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-lg font-medium transition-colors"
                 >
-                  Envoyer l'invitation
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowUserModal(false)}
-                  className="px-6 py-2 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors"
-                >
-                  Annuler
+                  Fermer
                 </button>
               </div>
-            </form>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-slate-900">Inviter un nouveau membre</h3>
+                  <button onClick={closeInvitationModal} className="p-2 hover:bg-slate-100 rounded-lg">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleAddUser} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                      Nom complet
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newUser.fullName}
+                      onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
+                      placeholder="Prenom et nom"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                      Adresse email professionnelle
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={newUser.email}
+                      onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                      placeholder="utilisateur@exemple.com"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                      <Shield className="w-4 h-4 inline mr-1" />
+                      Role
+                    </label>
+                    <select
+                      value={newUser.role}
+                      onChange={(e) => setNewUser({ ...newUser, role: e.target.value as any })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                    >
+                      <option value="reader">Lecteur - Consultation uniquement</option>
+                      <option value="editor">Editeur - Ajout et modification de documents</option>
+                      <option value="admin">Administrateur - Acces complet</option>
+                    </select>
+                  </div>
+
+                  {categories.length > 0 && (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                        Categories d'acces (optionnel)
+                      </label>
+                      <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto p-2 border border-slate-200 rounded-lg">
+                        {categories.map((cat) => (
+                          <label key={cat.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={newUser.categoryIds.includes(cat.id)}
+                              onChange={(e) => {
+                                const ids = e.target.checked
+                                  ? [...newUser.categoryIds, cat.id]
+                                  : newUser.categoryIds.filter((id) => id !== cat.id);
+                                setNewUser({ ...newUser, categoryIds: ids });
+                              }}
+                              className="rounded border-slate-300 text-blue-600"
+                            />
+                            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }} />
+                            {cat.name}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                      <MessageSquare className="w-4 h-4 inline mr-1" />
+                      Message personnel (optionnel)
+                    </label>
+                    <textarea
+                      value={newUser.personalMessage}
+                      onChange={(e) => setNewUser({ ...newUser, personalMessage: e.target.value })}
+                      placeholder="Ajoutez un message pour contextualiser l'invitation..."
+                      rows={2}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                    />
+                  </div>
+
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-slate-700">
+                      Un email d'invitation sera envoye avec un lien securise valable 7 jours.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="submit"
+                      disabled={submittingInvite}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white py-2.5 rounded-lg font-medium transition-colors"
+                    >
+                      {submittingInvite ? 'Envoi en cours...' : "Envoyer l'invitation"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={closeInvitationModal}
+                      className="px-6 py-2.5 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -464,11 +640,8 @@ export default function AdminPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-900">Ajouter une catégorie</h3>
-              <button
-                onClick={() => setShowCategoryModal(false)}
-                className="p-2 hover:bg-slate-100 rounded-lg"
-              >
+              <h3 className="text-lg font-semibold text-slate-900">Ajouter une categorie</h3>
+              <button onClick={() => setShowCategoryModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -476,14 +649,14 @@ export default function AdminPage() {
             <form onSubmit={handleAddCategory} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Nom de la catégorie
+                  Nom de la categorie
                 </label>
                 <input
                   type="text"
                   required
                   value={newCategory.name}
                   onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
-                  placeholder="Ex: Pédagogie"
+                  placeholder="Ex: Pedagogie"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                 />
               </div>
@@ -495,16 +668,14 @@ export default function AdminPage() {
                 <textarea
                   value={newCategory.description}
                   onChange={(e) => setNewCategory({ ...newCategory, description: e.target.value })}
-                  placeholder="Description de la catégorie"
+                  placeholder="Description de la categorie"
                   rows={3}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Couleur
-                </label>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Couleur</label>
                 <div className="flex gap-2">
                   <input
                     type="color"
