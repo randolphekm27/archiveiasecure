@@ -316,7 +316,7 @@ export default function JoinPage() {
                         type="text"
                         required
                         value={formData.username}
-                        onChange={(e) => setFormData({ ...formData, username: e.target.value.toLowerCase().replace(/\s/g, '') })}
+                        onChange={(e) => setFormData({ ...formData, username: e.target.value.replace(/\s/g, '') })}
                         className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                         placeholder="Choisissez un identifiant"
                       />

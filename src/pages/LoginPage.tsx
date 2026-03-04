@@ -168,7 +168,7 @@ export default function LoginPage() {
                     type="text"
                     required
                     value={loginForm.username}
-                    onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value.toLowerCase().replace(/\s/g, '') })}
+                    onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value.replace(/\s/g, '') })}
                     placeholder="admin"
                     className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
                   />
