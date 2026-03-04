@@ -88,6 +88,7 @@ export default function AdminPage() {
         full_name: newUser.fullName,
         role: newUser.role,
         token,
+        invited_by: profile.id,
         expires_at: expiresAt.toISOString(),
       });
 
