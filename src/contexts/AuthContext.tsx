@@ -180,7 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .maybeSingle();
 
     if (existingOrg) {
-      throw new Error('Ce code organisation existe déjà');
+      throw new Error('Ce code organisation existe deja');
     }
 
     const { data: org, error: orgError } = await supabase
@@ -197,7 +197,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw orgError;
     }
 
-    const virtualEmail = `admin+${orgData.code}@archivia.app`.toLowerCase();
+    const adminUsername = 'admin';
+    const virtualEmail = `${adminUsername}+${orgData.code}@archivia.app`.toLowerCase();
 
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: virtualEmail,
@@ -209,7 +210,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (authData.user) {
-      // Sign in immediately to establish session
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email: virtualEmail,
         password: orgData.adminPassword,
@@ -220,12 +220,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw signInError;
       }
 
-      // Now insert the profile with authenticated session
       const { error: profileError } = await supabase.from('users').insert({
         id: authData.user.id,
         organization_id: org.id,
-        username: 'admin',
+        username: adminUsername,
         full_name: orgData.adminName,
+        email: orgData.adminEmail,
         role: 'admin',
       });
 
@@ -233,6 +233,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error('Profile creation error:', profileError);
         throw profileError;
       }
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       const defaultCategories = [
         { name: 'Administratif', description: 'Documents administratifs', color: '#3B82F6' },
@@ -242,7 +244,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ];
 
       const { error: catError } = await supabase.from('categories').insert(
-        defaultCategories.map(cat => ({
+        defaultCategories.map((cat) => ({
           ...cat,
           organization_id: org.id,
         }))

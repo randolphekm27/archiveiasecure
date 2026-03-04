@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Building2, Lock, User, Mail, CircleUser as UserCircle2 } from 'lucide-react';
+import { Building2, Lock, User, Mail, CircleUser as UserCircle2, CheckCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginPage() {
   const [mode, setMode] = useState<'login' | 'create'>('login');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [createdOrg, setCreatedOrg] = useState<{ code: string; username: string } | null>(null);
   const { signIn, createOrganization } = useAuth();
 
   const [loginForm, setLoginForm] = useState({
@@ -47,22 +48,34 @@ export default function LoginPage() {
     }
 
     if (createForm.adminPassword.length < 6) {
-      setError('Le mot de passe doit contenir au moins 6 caractères');
+      setError('Le mot de passe doit contenir au moins 6 caracteres');
       return;
     }
 
     setLoading(true);
 
     try {
+      const code = createForm.orgCode.toUpperCase();
       await createOrganization({
         name: createForm.orgName,
-        code: createForm.orgCode.toUpperCase(),
+        code,
         adminEmail: createForm.adminEmail,
         adminPassword: createForm.adminPassword,
         adminName: createForm.adminName,
       });
+
+      setCreatedOrg({ code, username: 'admin' });
+      setLoginForm({
+        orgCode: code,
+        username: 'admin',
+        password: createForm.adminPassword,
+      });
+
+      setTimeout(() => {
+        setMode('login');
+      }, 100);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur lors de la création');
+      setError(err instanceof Error ? err.message : 'Erreur lors de la creation');
     } finally {
       setLoading(false);
     }
@@ -82,7 +95,7 @@ export default function LoginPage() {
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <div className="flex gap-2 mb-6">
             <button
-              onClick={() => setMode('login')}
+              onClick={() => { setMode('login'); setError(''); }}
               className={`flex-1 py-2.5 px-4 rounded-lg font-medium transition-all ${
                 mode === 'login'
                   ? 'bg-blue-600 text-white shadow-md'
@@ -92,16 +105,33 @@ export default function LoginPage() {
               Se Connecter
             </button>
             <button
-              onClick={() => setMode('create')}
+              onClick={() => { setMode('create'); setError(''); setCreatedOrg(null); }}
               className={`flex-1 py-2.5 px-4 rounded-lg font-medium transition-all ${
                 mode === 'create'
                   ? 'bg-emerald-600 text-white shadow-md'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              Créer Organisation
+              Creer Organisation
             </button>
           </div>
+
+          {createdOrg && mode === 'login' && (
+            <div className="mb-4 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle className="w-5 h-5 text-emerald-600" />
+                <span className="font-medium text-emerald-800">Organisation creee avec succes !</span>
+              </div>
+              <p className="text-sm text-emerald-700 mb-2">
+                Connectez-vous avec les identifiants suivants :
+              </p>
+              <div className="bg-white rounded-lg p-3 space-y-1 text-sm">
+                <p><span className="font-medium text-slate-600">Code :</span> <span className="font-mono text-slate-900">{createdOrg.code}</span></p>
+                <p><span className="font-medium text-slate-600">Utilisateur :</span> <span className="font-mono text-slate-900">{createdOrg.username}</span></p>
+                <p><span className="font-medium text-slate-600">Mot de passe :</span> <span className="text-slate-900">celui que vous avez choisi</span></p>
+              </div>
+            </div>
+          )}
 
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
@@ -139,7 +169,7 @@ export default function LoginPage() {
                     required
                     value={loginForm.username}
                     onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value.toLowerCase().replace(/\s/g, '') })}
-                    placeholder="Votre nom d'utilisateur"
+                    placeholder="admin"
                     className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
                   />
                 </div>
@@ -156,7 +186,7 @@ export default function LoginPage() {
                     required
                     value={loginForm.password}
                     onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-                    placeholder="••••••••"
+                    placeholder="Votre mot de passe"
                     className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
                   />
                 </div>
@@ -183,7 +213,7 @@ export default function LoginPage() {
                     required
                     value={createForm.orgName}
                     onChange={(e) => setCreateForm({ ...createForm, orgName: e.target.value })}
-                    placeholder="Ex: Ministère de l'Éducation"
+                    placeholder="Ex: Ministere de l'Education"
                     className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
                   />
                 </div>
@@ -204,7 +234,7 @@ export default function LoginPage() {
                     className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition font-mono"
                   />
                 </div>
-                <p className="text-xs text-slate-500 mt-1">Ce code sera utilisé pour la connexion</p>
+                <p className="text-xs text-slate-500 mt-1">Ce code sera utilise pour la connexion</p>
               </div>
 
               <div>
@@ -218,7 +248,7 @@ export default function LoginPage() {
                     required
                     value={createForm.adminName}
                     onChange={(e) => setCreateForm({ ...createForm, adminName: e.target.value })}
-                    placeholder="Prénom et nom"
+                    placeholder="Prenom et nom"
                     className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
                   />
                 </div>
@@ -252,7 +282,7 @@ export default function LoginPage() {
                     required
                     value={createForm.adminPassword}
                     onChange={(e) => setCreateForm({ ...createForm, adminPassword: e.target.value })}
-                    placeholder="••••••••"
+                    placeholder="Votre mot de passe"
                     className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
                   />
                 </div>
@@ -269,10 +299,16 @@ export default function LoginPage() {
                     required
                     value={createForm.confirmPassword}
                     onChange={(e) => setCreateForm({ ...createForm, confirmPassword: e.target.value })}
-                    placeholder="••••••••"
+                    placeholder="Confirmer le mot de passe"
                     className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
                   />
                 </div>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-xs text-blue-700">
+                  Apres la creation, votre nom d'utilisateur sera <strong>admin</strong>. Utilisez-le avec le code de l'organisation pour vous connecter.
+                </p>
               </div>
 
               <button
@@ -280,14 +316,14 @@ export default function LoginPage() {
                 disabled={loading}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-600/30"
               >
-                {loading ? 'Création...' : 'Créer l\'Organisation'}
+                {loading ? 'Creation...' : 'Creer l\'Organisation'}
               </button>
             </form>
           )}
         </div>
 
         <p className="text-center text-sm text-slate-500 mt-6">
-          Une solution sécurisée pour vos archives
+          Une solution securisee pour vos archives
         </p>
       </div>
     </div>

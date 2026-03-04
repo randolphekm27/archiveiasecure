@@ -129,8 +129,15 @@ export default function DeletionRequestsPage() {
   const checkAndResolve = async (requestId: string) => {
     if (!profile) return;
 
+    const { data: reqData } = await supabase
+      .from('deletion_requests')
+      .select('*')
+      .eq('id', requestId)
+      .maybeSingle();
+
+    if (!reqData) return;
+
     const request = requests.find((r) => r.id === requestId);
-    if (!request) return;
 
     const { data: allVotes } = await supabase
       .from('deletion_votes')
@@ -142,39 +149,45 @@ export default function DeletionRequestsPage() {
     const approvals = allVotes.filter((v) => v.vote === 'approve').length;
     const rejections = allVotes.filter((v) => v.vote === 'reject').length;
     const infoNeeded = allVotes.filter((v) => v.vote === 'info_needed').length;
-    const required = getEffectiveVotesRequired(request);
 
-    if (approvals >= required) {
+    const effectiveRequired = (() => {
+      if (adminCount <= 1) return 1;
+      if (adminCount === 2) return 2;
+      return Math.min(reqData.votes_required, adminCount);
+    })();
+
+    if (approvals >= effectiveRequired) {
       await supabase
         .from('deletion_requests')
         .update({ status: 'approved', resolved_at: new Date().toISOString() })
         .eq('id', requestId);
 
-      if (request.document) {
+      const doc = request?.document;
+      if (doc) {
         await supabase.from('secure_trash').insert({
           organization_id: profile.organization_id,
-          document_id: request.document_id,
-          document_data: request.document as any,
+          document_id: reqData.document_id,
+          document_data: doc as any,
           deletion_request_id: requestId,
           deleted_by: profile.id,
         });
 
-        await supabase.from('documents').delete().eq('id', request.document_id);
+        await supabase.from('documents').delete().eq('id', reqData.document_id);
 
         await logActivity({
           organizationId: profile.organization_id,
           userId: profile.id,
           action: 'document.deleted',
-          documentId: request.document_id,
-          details: { title: request.document.title, via_request: requestId },
+          documentId: reqData.document_id,
+          details: { title: doc.title, via_request: requestId },
         });
       }
-    } else if (rejections > 0) {
+    } else if (rejections >= effectiveRequired) {
       await supabase
         .from('deletion_requests')
         .update({ status: 'rejected', resolved_at: new Date().toISOString() })
         .eq('id', requestId);
-    } else if (infoNeeded > 0) {
+    } else if (infoNeeded > 0 && approvals === 0 && rejections === 0) {
       await supabase
         .from('deletion_requests')
         .update({ status: 'info_requested' })
