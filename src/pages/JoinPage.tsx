@@ -117,7 +117,7 @@ export default function JoinPage() {
     setError('');
 
     try {
-      const virtualEmail = `${formData.username}+${organization.code}@archivia.app`;
+      const virtualEmail = `${formData.username}+${organization.code}@archivia.app`.toLowerCase();
 
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: virtualEmail,

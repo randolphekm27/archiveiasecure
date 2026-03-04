@@ -100,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (orgCode: string, username: string, password: string) => {
     try {
-      const virtualEmail = `${username}+${orgCode}@archivia.app`;
+      const virtualEmail = `${username}+${orgCode}@archivia.app`.toLowerCase();
 
       const { data: authUser, error: authError } = await supabase.auth.signInWithPassword({
         email: virtualEmail,
@@ -134,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('Code organisation invalide');
     }
 
-    const virtualEmail = `${username}+${orgCode}@archivia.app`;
+    const virtualEmail = `${username}+${orgCode}@archivia.app`.toLowerCase();
 
     const { data: authData, error: signUpError } = await supabase.auth.signUp({
       email: virtualEmail,
@@ -146,7 +146,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (authData.user) {
-      // Sign in immediately to establish session
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email: virtualEmail,
         password,
@@ -198,7 +197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw orgError;
     }
 
-    const virtualEmail = `admin+${orgData.code}@archivia.app`;
+    const virtualEmail = `admin+${orgData.code}@archivia.app`.toLowerCase();
 
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: virtualEmail,
