@@ -92,7 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (authError) {
         if (authError.message.includes('Invalid login credentials') || authError.message.includes('User not found')) {
-          throw new Error('Identifiant ou mot de passe incorrect');
+          throw new Error('Nom d\'utilisateur ou mot de passe incorrect');
         }
         throw authError;
       }

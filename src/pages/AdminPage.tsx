@@ -28,10 +28,8 @@ export default function AdminPage() {
   const [showCategoryModal, setShowCategoryModal] = useState(false);
 
   const [newUser, setNewUser] = useState({
-    username: '',
     fullName: '',
     email: '',
-    password: '',
     role: 'reader' as 'admin' | 'editor' | 'reader',
   });
 
@@ -80,47 +78,50 @@ export default function AdminPage() {
     if (!profile?.organization_id || !organization) return;
 
     try {
-      const virtualEmail = `${newUser.username}+${organization.code}@archivia.app`;
+      const token = crypto.randomUUID();
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7);
 
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: virtualEmail,
-        password: newUser.password,
+      const { error: inviteError } = await supabase.from('user_invitations').insert({
+        organization_id: profile.organization_id,
+        email: newUser.email,
+        full_name: newUser.fullName,
+        role: newUser.role,
+        token,
+        expires_at: expiresAt.toISOString(),
       });
 
-      if (authError) throw authError;
+      if (inviteError) throw inviteError;
 
-      if (authData.user) {
-        // Sign in immediately to establish session
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email: virtualEmail,
-          password: newUser.password,
-        });
+      const invitationUrl = `${window.location.origin}/join/${token}`;
 
-        if (signInError) throw signInError;
-
-        const { error: profileError } = await supabase.from('users').insert({
-          id: authData.user.id,
-          organization_id: profile.organization_id,
-          username: newUser.username,
-          full_name: newUser.fullName,
+      const { error: functionError } = await supabase.functions.invoke('send-invitation', {
+        body: {
+          to: newUser.email,
+          fullName: newUser.fullName,
+          organizationName: organization.name,
+          invitationUrl,
           role: newUser.role,
-        });
+        },
+      });
 
-        if (profileError) throw profileError;
-
-        await loadData();
-        setShowUserModal(false);
-        setNewUser({
-          username: '',
-          fullName: '',
-          email: '',
-          password: '',
-          role: 'reader',
-        });
+      if (functionError) {
+        console.error('Error sending email:', functionError);
+        alert(`Invitation créée mais l'email n'a pas pu être envoyé. Lien d'invitation: ${invitationUrl}`);
+      } else {
+        alert('Invitation envoyée avec succès!');
       }
+
+      await loadData();
+      setShowUserModal(false);
+      setNewUser({
+        fullName: '',
+        email: '',
+        role: 'reader',
+      });
     } catch (error) {
-      console.error('Error adding user:', error);
-      alert('Erreur lors de l\'ajout de l\'utilisateur');
+      console.error('Error inviting user:', error);
+      alert('Erreur lors de l\'envoi de l\'invitation');
     }
   };
 
@@ -254,7 +255,7 @@ export default function AdminPage() {
                   className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
                 >
                   <UserPlus className="w-4 h-4" />
-                  Ajouter un utilisateur
+                  Inviter un utilisateur
                 </button>
               </div>
 
@@ -383,7 +384,7 @@ export default function AdminPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-900">Ajouter un utilisateur</h3>
+              <h3 className="text-lg font-semibold text-slate-900">Inviter un utilisateur</h3>
               <button
                 onClick={() => setShowUserModal(false)}
                 className="p-2 hover:bg-slate-100 rounded-lg"
@@ -402,32 +403,21 @@ export default function AdminPage() {
                   required
                   value={newUser.fullName}
                   onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
+                  placeholder="Prénom et nom"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Identifiant
+                  Adresse email
                 </label>
                 <input
-                  type="text"
+                  type="email"
                   required
-                  value={newUser.username}
-                  onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Mot de passe
-                </label>
-                <input
-                  type="password"
-                  required
-                  value={newUser.password}
-                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                  value={newUser.email}
+                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                  placeholder="utilisateur@exemple.com"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                 />
               </div>
@@ -447,12 +437,18 @@ export default function AdminPage() {
                 </select>
               </div>
 
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-slate-700">
+                  Un email d'invitation sera envoyé à cette adresse avec un lien pour créer son compte.
+                </p>
+              </div>
+
               <div className="flex gap-3 pt-2">
                 <button
                   type="submit"
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-medium transition-colors"
                 >
-                  Ajouter
+                  Envoyer l'invitation
                 </button>
                 <button
                   type="button"

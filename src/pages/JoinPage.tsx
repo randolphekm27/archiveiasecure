@@ -191,8 +191,11 @@ export default function JoinPage() {
 
         {!error && invitation && organization && !success && (
           <>
-            <div className="mb-6 p-4 bg-blue-50 rounded-lg">
-              <p className="text-sm text-slate-700">
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-slate-700 mb-2">
+                <strong>Bienvenue {invitation.full_name}!</strong>
+              </p>
+              <p className="text-sm text-slate-600">
                 Vous êtes invité à rejoindre <strong>{organization.name}</strong> en tant que <strong>{invitation.role === 'admin' ? 'Administrateur' : invitation.role === 'editor' ? 'Éditeur' : 'Lecteur'}</strong>.
               </p>
             </div>
@@ -212,7 +215,7 @@ export default function JoinPage() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Identifiant
+                  Nom d'utilisateur
                 </label>
                 <input
                   type="text"
@@ -220,8 +223,11 @@ export default function JoinPage() {
                   value={formData.username}
                   onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                  placeholder="Votre identifiant unique"
+                  placeholder="Choisissez un nom d'utilisateur"
                 />
+                <p className="text-xs text-slate-500 mt-1">
+                  Vous utiliserez ce nom pour vous connecter
+                </p>
               </div>
 
               <div>
