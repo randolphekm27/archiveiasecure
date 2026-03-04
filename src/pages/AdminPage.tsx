@@ -1,15 +1,5 @@
 import { useState, useEffect } from 'react';
-import {
-  Users,
-  FolderOpen,
-  Building2,
-  Plus,
-  Trash2,
-  Edit2,
-  X,
-  Check,
-  UserPlus
-} from 'lucide-react';
+import { Users, FolderOpen, Building2, Plus, Trash2, CreditCard as Edit2, X, Check, UserPlus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
