@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Building2, Lock, User, Mail, UserCircle2 } from 'lucide-react';
+import { Building2, Lock, User, Mail, CircleUser as UserCircle2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginPage() {
