@@ -86,21 +86,27 @@ export default function AdminPage() {
 
       const invitationUrl = `${window.location.origin}/join/${token}`;
 
-      const { error: functionError } = await supabase.functions.invoke('send-invitation', {
-        body: {
-          to: newUser.email,
-          fullName: newUser.fullName,
-          organizationName: organization.name,
-          invitationUrl,
-          role: newUser.role,
-        },
-      });
+      try {
+        const { data, error: functionError } = await supabase.functions.invoke('send-invitation', {
+          body: {
+            to: newUser.email,
+            fullName: newUser.fullName,
+            organizationName: organization.name,
+            invitationUrl,
+            role: newUser.role,
+          },
+        });
 
-      if (functionError) {
-        console.error('Error sending email:', functionError);
-        alert(`Invitation créée mais l'email n'a pas pu être envoyé. Lien d'invitation: ${invitationUrl}`);
-      } else {
-        alert('Invitation envoyée avec succès!');
+        if (functionError) {
+          console.error('Error sending email:', functionError);
+          alert(`Invitation créée. Partagez ce lien avec l'utilisateur: ${invitationUrl}`);
+        } else {
+          console.log('Email function response:', data);
+          alert(`Invitation créée. Partagez ce lien avec l'utilisateur: ${invitationUrl}`);
+        }
+      } catch (err) {
+        console.error('Error calling send-invitation function:', err);
+        alert(`Invitation créée. Partagez ce lien avec l'utilisateur: ${invitationUrl}`);
       }
 
       await loadData();
