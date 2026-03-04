@@ -12,20 +12,24 @@ import {
   Check,
   MessageSquare,
   Shield,
+  Send,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/activityLogger';
+import InvitationHistory from '../components/InvitationHistory';
 import type { Database } from '../lib/database.types';
 
 type UserRow = Database['public']['Tables']['users']['Row'];
 type Category = Database['public']['Tables']['categories']['Row'];
+type Invitation = Database['public']['Tables']['user_invitations']['Row'];
 
 export default function AdminPage() {
   const { profile, organization } = useAuth();
-  const [activeTab, setActiveTab] = useState<'users' | 'categories' | 'org'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'categories' | 'invitations' | 'org'>('users');
   const [users, setUsers] = useState<UserRow[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [invitations, setInvitations] = useState<(Invitation & { inviter_name?: string })[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [showUserModal, setShowUserModal] = useState(false);
@@ -64,7 +68,7 @@ export default function AdminPage() {
         return;
       }
 
-      const [usersResult, catsResult] = await Promise.all([
+      const [usersResult, catsResult, invResult] = await Promise.all([
         supabase
           .from('users')
           .select('*')
@@ -75,10 +79,22 @@ export default function AdminPage() {
           .select('*')
           .eq('organization_id', profile.organization_id)
           .order('name'),
+        supabase
+          .from('user_invitations')
+          .select('*')
+          .eq('organization_id', profile.organization_id)
+          .order('created_at', { ascending: false }),
       ]);
 
       if (usersResult.data) setUsers(usersResult.data);
       if (catsResult.data) setCategories(catsResult.data);
+      if (invResult.data && usersResult.data) {
+        const enriched = invResult.data.map((inv) => ({
+          ...inv,
+          inviter_name: usersResult.data.find((u) => u.id === inv.invited_by)?.full_name,
+        }));
+        setInvitations(enriched);
+      }
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -297,6 +313,7 @@ export default function AdminPage() {
           <div className="flex gap-1 p-1">
             {[
               { id: 'users' as const, label: 'Utilisateurs', icon: Users },
+              { id: 'invitations' as const, label: 'Invitations', icon: Send },
               { id: 'categories' as const, label: 'Categories', icon: FolderOpen },
               { id: 'org' as const, label: 'Organisation', icon: Building2 },
             ].map((tab) => {
@@ -433,6 +450,14 @@ export default function AdminPage() {
                 ))}
               </div>
             </div>
+          )}
+
+          {activeTab === 'invitations' && (
+            <InvitationHistory
+              invitations={invitations}
+              onRefresh={loadData}
+              onCopyLink={handleCopyLink}
+            />
           )}
 
           {activeTab === 'org' && (
