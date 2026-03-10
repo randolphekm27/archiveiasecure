@@ -100,14 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (orgCode: string, username: string, password: string) => {
     try {
-      const { data: { session: existingSession } } = await supabase.auth.getSession();
-      if (existingSession) {
-        await supabase.auth.signOut({ scope: 'local' });
-      }
-
-      const normalizedOrgCode = orgCode.trim().toUpperCase();
-      const normalizedUsername = username.trim().toLowerCase();
-      const virtualEmail = `${normalizedUsername}+${normalizedOrgCode}@archivia.app`.toLowerCase();
+      const virtualEmail = `${username}+${orgCode}@archivia.app`.toLowerCase();
 
       const { data: authUser, error: authError } = await supabase.auth.signInWithPassword({
         email: virtualEmail,
@@ -266,14 +259,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
     setOrganization(null);
-    try {
-      await supabase.auth.signOut({ scope: 'local' });
-    } catch {
-      // ignore signOut errors
-    }
   };
 
   return (
