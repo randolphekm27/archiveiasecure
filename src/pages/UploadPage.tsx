@@ -8,7 +8,7 @@ import type { Database } from '../lib/database.types';
 type Category = Database['public']['Tables']['categories']['Row'];
 
 export default function UploadPage({ onNavigate }: { onNavigate: (page: string) => void }) {
-  const { profile } = useAuth();
+  const { profile, refreshProfile, loading: authLoading } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
   const [uploading, setUploading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -57,7 +57,7 @@ export default function UploadPage({ onNavigate }: { onNavigate: (page: string) 
   const loadCategories = async () => {
     if (!profile?.organization_id) return;
 
-    const { data } = await supabase
+    const { data } = await (supabase as any)
       .from('categories')
       .select('*')
       .eq('organization_id', profile.organization_id)
@@ -117,9 +117,26 @@ export default function UploadPage({ onNavigate }: { onNavigate: (page: string) 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!file || !profile?.organization_id) {
-      setError('Veuillez selectionner un fichier');
+    if (!file) {
+      setError('Veuillez selectionner un fichier avant d\'archiver.');
       return;
+    }
+
+    if (!profile?.organization_id) {
+      setError("Tentative de synchronisation de votre profil...");
+      try {
+        await refreshProfile();
+        // Wait a small bit for state propagation
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (err) {
+        console.error('Refresh profile error:', err);
+      }
+
+      if (!profile?.organization_id) {
+        setError("Impossible d'archiver : votre profil n'est pas encore completement charge ou vous n'etes pas associe a une organisation.");
+        return;
+      }
+      setError('');
     }
 
     setUploading(true);
@@ -145,7 +162,7 @@ export default function UploadPage({ onNavigate }: { onNavigate: (page: string) 
         .map((k) => k.trim())
         .filter((k) => k.length > 0);
 
-      const { error: dbError } = await supabase.from('documents').insert({
+      const { error: dbError } = await (supabase as any).from('documents').insert({
         organization_id: profile.organization_id,
         title: formData.title,
         description: formData.description,
@@ -161,7 +178,7 @@ export default function UploadPage({ onNavigate }: { onNavigate: (page: string) 
 
       if (dbError) throw dbError;
 
-      await supabase.from('activity_logs').insert({
+      await (supabase as any).from('activity_logs').insert({
         organization_id: profile.organization_id,
         user_id: profile.id,
         action: 'document.upload',
@@ -387,10 +404,10 @@ export default function UploadPage({ onNavigate }: { onNavigate: (page: string) 
           <div className="flex gap-3">
             <button
               type="submit"
-              disabled={uploading}
+              disabled={uploading || authLoading}
               className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-600/30"
             >
-              {uploading ? 'Archivage en cours...' : 'Archiver le Document'}
+              {uploading ? 'Archivage en cours...' : authLoading ? 'Synchronisation...' : 'Archiver le Document'}
             </button>
             <button
               type="button"

@@ -44,6 +44,7 @@ export interface Database {
           role: 'admin' | 'editor' | 'reader'
           avatar_url: string | null
           email: string | null
+          job_title: string | null
           is_active: boolean
           last_login: string | null
           created_at: string
@@ -56,6 +57,7 @@ export interface Database {
           role?: 'admin' | 'editor' | 'reader'
           avatar_url?: string | null
           email?: string | null
+          job_title?: string | null
           is_active?: boolean
           last_login?: string | null
           created_at?: string
@@ -68,6 +70,7 @@ export interface Database {
           role?: 'admin' | 'editor' | 'reader'
           avatar_url?: string | null
           email?: string | null
+          job_title?: string | null
           is_active?: boolean
           last_login?: string | null
           created_at?: string
@@ -202,7 +205,6 @@ export interface Database {
           accepted_at: string | null
           expires_at: string
           personal_message: string | null
-          category_ids: string[]
           created_at: string
         }
         Insert: {
@@ -216,7 +218,6 @@ export interface Database {
           accepted_at?: string | null
           expires_at: string
           personal_message?: string | null
-          category_ids?: string[]
           created_at?: string
         }
         Update: {
@@ -230,7 +231,6 @@ export interface Database {
           accepted_at?: string | null
           expires_at?: string
           personal_message?: string | null
-          category_ids?: string[]
           created_at?: string
         }
       }

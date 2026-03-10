@@ -37,17 +37,26 @@ export default function SearchPage() {
         return;
       }
 
+      let docsQuery = supabase
+        .from('documents')
+        .select('*')
+        .eq('organization_id', profile.organization_id);
+
+      let catsQuery = supabase
+        .from('categories')
+        .select('*')
+        .eq('organization_id', profile.organization_id)
+        .order('name');
+
+      // Enforce category restrictions for non-admins
+      if (profile.role !== 'admin' && (profile as any).category_ids && (profile as any).category_ids.length > 0) {
+        docsQuery = docsQuery.in('category_id', (profile as any).category_ids);
+        catsQuery = catsQuery.in('id', (profile as any).category_ids);
+      }
+
       const [docsResult, catsResult] = await Promise.all([
-        supabase
-          .from('documents')
-          .select('*')
-          .eq('organization_id', profile.organization_id)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('categories')
-          .select('*')
-          .eq('organization_id', profile.organization_id)
-          .order('name')
+        docsQuery.order('created_at', { ascending: false }),
+        catsQuery
       ]);
 
       if (docsResult.data) setDocuments(docsResult.data);

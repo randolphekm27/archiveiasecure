@@ -16,6 +16,7 @@ import {
   FolderOpen,
   Trash2,
   RotateCcw,
+  Briefcase,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -25,12 +26,24 @@ import type { Database } from '../lib/database.types';
 type ActivityLog = Database['public']['Tables']['activity_logs']['Row'];
 
 export default function ProfilePage() {
-  const { profile, organization } = useAuth();
+  const { profile, organization, refreshProfile } = useAuth();
   const [personalLogs, setPersonalLogs] = useState<ActivityLog[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editData, setEditData] = useState({
+    fullName: '',
+    jobTitle: '',
+  });
 
   useEffect(() => {
-    if (profile) loadPersonalActivity();
+    if (profile) {
+      loadPersonalActivity();
+      setEditData({
+        fullName: profile.full_name || '',
+        jobTitle: (profile as any).job_title || '',
+      });
+    }
   }, [profile]);
 
   const loadPersonalActivity = async () => {
@@ -52,21 +65,48 @@ export default function ProfilePage() {
     }
   };
 
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profile) return;
+
+    setSaving(true);
+    try {
+      const { error } = await (supabase as any)
+        .from('users')
+        .update({
+          full_name: editData.fullName,
+          job_title: editData.jobTitle,
+        })
+        .eq('id', profile.id);
+
+      if (error) throw error;
+      setEditing(false);
+      
+      alert('Profil mis a jour avec succes !');
+      await refreshProfile();
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      alert('Erreur lors de la mise a jour du profil');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const getPermissions = () => {
-    const base = [
+    const base: { icon: any; text: string; allowed: boolean }[] = [
       { icon: Eye, text: 'Consulter tous les documents', allowed: true },
       { icon: Search, text: 'Recherche simple et avancee', allowed: true },
       { icon: Download, text: 'Telecharger les documents', allowed: true },
       { icon: User, text: 'Modifier son profil personnel', allowed: true },
     ];
 
-    const editor = [
+    const editor: { icon: any; text: string; allowed: boolean }[] = [
       { icon: Upload, text: 'Scanner et ajouter des documents', allowed: profile?.role !== 'reader' },
       { icon: FileText, text: 'Modifier les metadonnees des documents', allowed: profile?.role !== 'reader' },
       { icon: FolderOpen, text: 'Creer des dossiers et organiser', allowed: profile?.role !== 'reader' },
     ];
 
-    const admin = [
+    const admin: { icon: any; text: string; allowed: boolean }[] = [
       { icon: UserPlus, text: 'Inviter de nouveaux membres', allowed: profile?.role === 'admin' },
       { icon: Shield, text: 'Definir les roles des utilisateurs', allowed: profile?.role === 'admin' },
       { icon: Settings, text: 'Configurer les parametres', allowed: profile?.role === 'admin' },
@@ -105,55 +145,111 @@ export default function ProfilePage() {
             )}
           </div>
           <div>
-            <h3 className="text-xl font-semibold text-slate-900">{profile?.full_name}</h3>
+            <div className="flex items-center gap-3">
+              <h3 className="text-xl font-semibold text-slate-900">{profile?.full_name}</h3>
+              <button
+                onClick={() => setEditing(!editing)}
+                className="text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 px-2.5 py-1 rounded-full transition-colors"
+              >
+                {editing ? 'Annuler' : 'Modifier'}
+              </button>
+            </div>
             <p className="text-slate-600">@{profile?.username}</p>
             {profile?.email && <p className="text-sm text-slate-500 mt-0.5">{profile.email}</p>}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="p-4 bg-slate-50 rounded-lg">
-            <div className="flex items-center gap-2 mb-1">
-              <Building2 className="w-4 h-4 text-slate-600" />
-              <p className="text-sm text-slate-600">Organisation</p>
+        {editing ? (
+          <form onSubmit={handleUpdateProfile} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Nom complet
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editData.fullName}
+                  onChange={(e) => setEditData({ ...editData, fullName: e.target.value })}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Fonction / Poste
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editData.jobTitle}
+                  onChange={(e) => setEditData({ ...editData, jobTitle: e.target.value })}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
             </div>
-            <p className="font-medium text-slate-900">{organization?.name}</p>
-            <p className="text-sm text-slate-600 mt-1">Code: {organization?.code}</p>
-          </div>
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={saving}
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+              >
+                {saving ? 'Enregistrement...' : 'Enregistrer les modifications'}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-4 bg-slate-50 rounded-lg">
+              <div className="flex items-center gap-2 mb-1">
+                <Briefcase className="w-4 h-4 text-slate-600" />
+                <p className="text-sm text-slate-600">Poste / Fonction</p>
+              </div>
+              <p className="font-medium text-slate-900">{(profile as any)?.job_title || 'Non defini'}</p>
+            </div>
 
-          <div className="p-4 bg-slate-50 rounded-lg">
-            <div className="flex items-center gap-2 mb-1">
-              <Shield className="w-4 h-4 text-slate-600" />
-              <p className="text-sm text-slate-600">Role</p>
+            <div className="p-4 bg-slate-50 rounded-lg">
+              <div className="flex items-center gap-2 mb-1">
+                <Shield className="w-4 h-4 text-slate-600" />
+                <p className="text-sm text-slate-600">Role</p>
+              </div>
+              <span
+                className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${
+                  profile?.role === 'admin'
+                    ? 'bg-rose-100 text-rose-700'
+                    : profile?.role === 'editor'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-slate-100 text-slate-700'
+                }`}
+              >
+                {getRoleFr()}
+              </span>
             </div>
-            <span
-              className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${
-                profile?.role === 'admin'
-                  ? 'bg-rose-100 text-rose-700'
-                  : profile?.role === 'editor'
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'bg-slate-100 text-slate-700'
-              }`}
-            >
-              {getRoleFr()}
-            </span>
-          </div>
 
-          <div className="p-4 bg-slate-50 rounded-lg md:col-span-2">
-            <div className="flex items-center gap-2 mb-1">
-              <Calendar className="w-4 h-4 text-slate-600" />
-              <p className="text-sm text-slate-600">Membre depuis</p>
+            <div className="p-4 bg-slate-50 rounded-lg">
+              <div className="flex items-center gap-2 mb-1">
+                <Building2 className="w-4 h-4 text-slate-600" />
+                <p className="text-sm text-slate-600">Organisation</p>
+              </div>
+              <p className="font-medium text-slate-900">{organization?.name}</p>
+              <p className="text-sm text-slate-600 mt-1">Code: {organization?.code}</p>
             </div>
-            <p className="font-medium text-slate-900">
-              {profile?.created_at &&
-                new Date(profile.created_at).toLocaleDateString('fr-FR', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}
-            </p>
+
+            <div className="p-4 bg-slate-50 rounded-lg">
+              <div className="flex items-center gap-2 mb-1">
+                <Calendar className="w-4 h-4 text-slate-600" />
+                <p className="text-sm text-slate-600">Membre depuis</p>
+              </div>
+              <p className="font-medium text-slate-900">
+                {profile?.created_at &&
+                  new Date(profile.created_at).toLocaleDateString('fr-FR', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
+              </p>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="bg-white rounded-xl p-6 border border-slate-200">

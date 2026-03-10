@@ -70,18 +70,27 @@ export default function StatisticsPage() {
     if (!profile?.organization_id) return;
 
     try {
+      let docsQuery = supabase.from('documents').select('*').eq('organization_id', (profile as any).organization_id);
+      let catsQuery = supabase.from('categories').select('*').eq('organization_id', (profile as any).organization_id);
+
+      // Enforce category restrictions for non-admins
+      if (profile.role !== 'admin' && (profile as any).category_ids && (profile as any).category_ids.length > 0) {
+        docsQuery = docsQuery.in('category_id', (profile as any).category_ids);
+        catsQuery = catsQuery.in('id', (profile as any).category_ids);
+      }
+
       const [docsResult, usersResult, catsResult, logsResult, deletionsResult] = await Promise.all([
-        supabase.from('documents').select('*').eq('organization_id', profile.organization_id),
-        supabase.from('users').select('*').eq('organization_id', profile.organization_id),
-        supabase.from('categories').select('*').eq('organization_id', profile.organization_id),
-        supabase.from('activity_logs').select('*').eq('organization_id', profile.organization_id).order('created_at', { ascending: false }).limit(50),
-        supabase.from('deletion_requests').select('*', { count: 'exact', head: true }).eq('organization_id', profile.organization_id),
+        docsQuery,
+        supabase.from('users').select('*').eq('organization_id', (profile as any).organization_id),
+        catsQuery,
+        supabase.from('activity_logs').select('*').eq('organization_id', (profile as any).organization_id).order('created_at', { ascending: false }).limit(50),
+        supabase.from('deletion_requests').select('*', { count: 'exact', head: true }).eq('organization_id', (profile as any).organization_id),
       ]);
 
-      const documents = docsResult.data || [];
-      const users = usersResult.data || [];
-      const categories = catsResult.data || [];
-      const logs = logsResult.data || [];
+      const documents = (docsResult.data || []) as any[];
+      const users = (usersResult.data || []) as any[];
+      const categories = (catsResult.data || []) as any[];
+      const logs = (logsResult.data || []) as any[];
 
       const now = new Date();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -118,7 +127,7 @@ export default function StatisticsPage() {
           name: 'Non categorise',
           color: '#94A3B8',
           count: uncategorized,
-          percentage: Math.round((uncategorized / documents.length) * 100),
+          percentage: documents.length > 0 ? Math.round((uncategorized / documents.length) * 100) : 0,
         });
       }
       setCategoryStats(catCounts.sort((a, b) => b.count - a.count));

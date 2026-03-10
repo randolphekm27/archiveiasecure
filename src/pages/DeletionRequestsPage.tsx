@@ -46,7 +46,7 @@ export default function DeletionRequestsPage() {
     try {
       const [reqResult, usersResult, docsResult, votesResult] = await Promise.all([
         (() => {
-          let query = supabase
+          let query = (supabase as any)
             .from('deletion_requests')
             .select('*')
             .eq('organization_id', profile.organization_id)
@@ -56,9 +56,9 @@ export default function DeletionRequestsPage() {
           }
           return query;
         })(),
-        supabase.from('users').select('*').eq('organization_id', profile.organization_id),
-        supabase.from('documents').select('*').eq('organization_id', profile.organization_id),
-        supabase.from('deletion_votes').select('*'),
+        (supabase as any).from('users').select('*').eq('organization_id', profile.organization_id),
+        (supabase as any).from('documents').select('*').eq('organization_id', profile.organization_id),
+        (supabase as any).from('deletion_votes').select('*'),
       ]);
 
       const users = usersResult.data || [];
@@ -66,16 +66,16 @@ export default function DeletionRequestsPage() {
       const votes = votesResult.data || [];
       const reqData = reqResult.data || [];
 
-      const admins = users.filter((u) => u.role === 'admin');
+      const admins = users.filter((u: any) => u.role === 'admin');
       setAdminCount(admins.length);
 
-      const enriched: RequestWithDetails[] = reqData.map((req) => ({
+      const enriched: RequestWithDetails[] = reqData.map((req: any) => ({
         ...req,
-        document: docs.find((d) => d.id === req.document_id),
-        requester: users.find((u) => u.id === req.requested_by),
+        document: docs.find((d: any) => d.id === req.document_id),
+        requester: users.find((u: any) => u.id === req.requested_by),
         votes: votes
-          .filter((v) => v.deletion_request_id === req.id)
-          .map((v) => ({ ...v, voter: users.find((u) => u.id === v.voter_id) })),
+          .filter((v: any) => v.deletion_request_id === req.id)
+          .map((v: any) => ({ ...v, voter: users.find((u: any) => u.id === v.voter_id) })),
       }));
 
       setRequests(enriched);
@@ -99,7 +99,7 @@ export default function DeletionRequestsPage() {
     try {
       const comment = voteComments[requestId] || null;
 
-      const { error: voteError } = await supabase.from('deletion_votes').insert({
+      const { error: voteError } = await (supabase as any).from('deletion_votes').insert({
         deletion_request_id: requestId,
         voter_id: profile.id,
         vote,
@@ -129,7 +129,7 @@ export default function DeletionRequestsPage() {
   const checkAndResolve = async (requestId: string) => {
     if (!profile) return;
 
-    const { data: reqData } = await supabase
+    const { data: reqData } = await (supabase as any)
       .from('deletion_requests')
       .select('*')
       .eq('id', requestId)
@@ -139,16 +139,16 @@ export default function DeletionRequestsPage() {
 
     const request = requests.find((r) => r.id === requestId);
 
-    const { data: allVotes } = await supabase
+    const { data: allVotes } = await (supabase as any)
       .from('deletion_votes')
       .select('*')
       .eq('deletion_request_id', requestId);
 
     if (!allVotes) return;
 
-    const approvals = allVotes.filter((v) => v.vote === 'approve').length;
-    const rejections = allVotes.filter((v) => v.vote === 'reject').length;
-    const infoNeeded = allVotes.filter((v) => v.vote === 'info_needed').length;
+    const approvals = allVotes.filter((v: any) => v.vote === 'approve').length;
+    const rejections = allVotes.filter((v: any) => v.vote === 'reject').length;
+    const infoNeeded = allVotes.filter((v: any) => v.vote === 'info_needed').length;
 
     const effectiveRequired = (() => {
       if (adminCount <= 1) return 1;
@@ -156,15 +156,17 @@ export default function DeletionRequestsPage() {
       return Math.min(reqData.votes_required, adminCount);
     })();
 
+    const possibleApprovals = adminCount - rejections;
+
     if (approvals >= effectiveRequired) {
-      await supabase
+      await (supabase as any)
         .from('deletion_requests')
         .update({ status: 'approved', resolved_at: new Date().toISOString() })
         .eq('id', requestId);
 
       const doc = request?.document;
       if (doc) {
-        await supabase.from('secure_trash').insert({
+        await (supabase as any).from('secure_trash').insert({
           organization_id: profile.organization_id,
           document_id: reqData.document_id,
           document_data: doc as any,
@@ -172,7 +174,7 @@ export default function DeletionRequestsPage() {
           deleted_by: profile.id,
         });
 
-        await supabase.from('documents').delete().eq('id', reqData.document_id);
+        await (supabase as any).from('documents').delete().eq('id', reqData.document_id);
 
         await logActivity({
           organizationId: profile.organization_id,
@@ -182,13 +184,14 @@ export default function DeletionRequestsPage() {
           details: { title: doc.title, via_request: requestId },
         });
       }
-    } else if (rejections >= effectiveRequired) {
-      await supabase
+    } else if (rejections >= effectiveRequired || possibleApprovals < effectiveRequired) {
+      // Reject if rejections meet the threshold OR if it's impossible to reach approvals
+      await (supabase as any)
         .from('deletion_requests')
         .update({ status: 'rejected', resolved_at: new Date().toISOString() })
         .eq('id', requestId);
-    } else if (infoNeeded > 0 && approvals === 0 && rejections === 0) {
-      await supabase
+    } else if (infoNeeded > 0) {
+      await (supabase as any)
         .from('deletion_requests')
         .update({ status: 'info_requested' })
         .eq('id', requestId);
@@ -203,7 +206,7 @@ export default function DeletionRequestsPage() {
       const request = requests.find((r) => r.id === requestId);
       if (!request) return;
 
-      const { error: voteError } = await supabase.from('deletion_votes').insert({
+      const { error: voteError } = await (supabase as any).from('deletion_votes').insert({
         deletion_request_id: requestId,
         voter_id: profile.id,
         vote: 'approve',
@@ -212,13 +215,13 @@ export default function DeletionRequestsPage() {
 
       if (voteError) throw voteError;
 
-      await supabase
+      await (supabase as any)
         .from('deletion_requests')
         .update({ status: 'approved', resolved_at: new Date().toISOString() })
         .eq('id', requestId);
 
       if (request.document) {
-        await supabase.from('secure_trash').insert({
+        await (supabase as any).from('secure_trash').insert({
           organization_id: profile.organization_id,
           document_id: request.document_id,
           document_data: request.document as any,
@@ -226,7 +229,7 @@ export default function DeletionRequestsPage() {
           deleted_by: profile.id,
         });
 
-        await supabase.from('documents').delete().eq('id', request.document_id);
+        await (supabase as any).from('documents').delete().eq('id', request.document_id);
 
         await logActivity({
           organizationId: profile.organization_id,

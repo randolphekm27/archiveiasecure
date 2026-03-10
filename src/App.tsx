@@ -14,6 +14,7 @@ import DeletionRequestsPage from './pages/DeletionRequestsPage';
 import SecureTrashPage from './pages/SecureTrashPage';
 import ActivityLogPage from './pages/ActivityLogPage';
 import StatisticsPage from './pages/StatisticsPage';
+import GovernancePage from './pages/GovernancePage';
 
 function AppRoutes() {
   const { user, loading } = useAuth();
@@ -42,6 +43,8 @@ function AppRoutes() {
         return <SearchPage />;
       case 'admin':
         return <AdminPage />;
+      case 'governance':
+        return <GovernancePage onNavigate={setCurrentPage} />;
       case 'profile':
         return <ProfilePage />;
       case 'deletion-requests':

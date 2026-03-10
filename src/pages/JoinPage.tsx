@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Building2, AlertCircle, CheckCircle, Shield, Lock, User } from 'lucide-react';
+import { Building2, AlertCircle, CheckCircle, Shield, Lock, User, Briefcase } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/activityLogger';
 
@@ -36,6 +36,7 @@ export default function JoinPage() {
   const [formData, setFormData] = useState({
     fullName: '',
     username: '',
+    jobTitle: '',
     password: '',
     confirmPassword: '',
     acceptTerms: false,
@@ -55,7 +56,7 @@ export default function JoinPage() {
         return;
       }
 
-      const { data: inv, error: invError } = await supabase
+      const { data: inv, error: invError } = await (supabase as any)
         .from('user_invitations')
         .select('*')
         .eq('token', token)
@@ -82,8 +83,8 @@ export default function JoinPage() {
       }
 
       const [{ data: org }, { data: inviter }] = await Promise.all([
-        supabase.from('organizations').select('*').eq('id', inv.organization_id).maybeSingle(),
-        supabase.from('users').select('full_name').eq('id', inv.invited_by).maybeSingle(),
+        (supabase as any).from('organizations').select('*').eq('id', (inv as any).organization_id).maybeSingle(),
+        (supabase as any).from('users').select('full_name').eq('id', (inv as any).invited_by).maybeSingle(),
       ]);
 
       if (!org) throw new Error('Organisation introuvable');
@@ -138,18 +139,20 @@ export default function JoinPage() {
 
         if (signInError) throw signInError;
 
-        const { error: profileError } = await supabase.from('users').insert({
+        const { error: profileError } = await (supabase as any).from('users').insert({
           id: authData.user.id,
           organization_id: organization.id,
           username: formData.username,
           full_name: formData.fullName,
+          job_title: formData.jobTitle,
           email: invitation.email,
           role: invitation.role as any,
+          category_ids: (invitation as any).category_ids || [],
         });
 
         if (profileError) throw profileError;
 
-        const { error: updateError } = await supabase
+        const { error: updateError } = await (supabase as any)
           .from('user_invitations')
           .update({ accepted_at: new Date().toISOString() })
           .eq('id', invitation.id);
@@ -308,6 +311,23 @@ export default function JoinPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                      Votre fonction / Poste
+                    </label>
+                    <div className="relative">
+                      <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input
+                        type="text"
+                        required
+                        value={formData.jobTitle}
+                        onChange={(e) => setFormData({ ...formData, jobTitle: e.target.value })}
+                        className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                        placeholder="Ex: Responsable RH, Comptable..."
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
                       Nom d'utilisateur
                     </label>
                     <div className="relative">
@@ -316,7 +336,7 @@ export default function JoinPage() {
                         type="text"
                         required
                         value={formData.username}
-                        onChange={(e) => setFormData({ ...formData, username: e.target.value.replace(/\s/g, '') })}
+                        onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                         className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                         placeholder="Choisissez un identifiant"
                       />

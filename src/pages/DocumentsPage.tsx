@@ -43,13 +43,19 @@ export default function DocumentsPage() {
         return;
       }
 
+      let docsQuery = (supabase as any)
+        .from('documents')
+        .select('*')
+        .eq('organization_id', profile.organization_id);
+
+      // Enforce category restrictions for non-admins
+      if (profile.role !== 'admin' && (profile as any).category_ids && (profile as any).category_ids.length > 0) {
+        docsQuery = docsQuery.in('category_id', (profile as any).category_ids);
+      }
+
       const [docsResult, catsResult] = await Promise.all([
-        supabase
-          .from('documents')
-          .select('*')
-          .eq('organization_id', profile.organization_id)
-          .order('created_at', { ascending: false }),
-        supabase
+        docsQuery.order('created_at', { ascending: false }),
+        (supabase as any)
           .from('categories')
           .select('*')
           .eq('organization_id', profile.organization_id),
@@ -71,7 +77,7 @@ export default function DocumentsPage() {
     setSubmittingDeletion(true);
 
     try {
-      const { error } = await supabase.from('deletion_requests').insert({
+      const { error } = await (supabase as any).from('deletion_requests').insert({
         organization_id: profile.organization_id,
         document_id: deletionModal.id,
         requested_by: profile.id,
@@ -103,7 +109,7 @@ export default function DocumentsPage() {
 
   const handlePreview = async (doc: Document) => {
     setPreviewDoc(doc);
-    await supabase
+    await (supabase as any)
       .from('documents')
       .update({ views_count: (doc.views_count || 0) + 1 })
       .eq('id', doc.id);
@@ -256,7 +262,7 @@ export default function DocumentsPage() {
                           >
                             <Download className="w-4 h-4 text-emerald-600" />
                           </a>
-                          {profile?.role === 'admin' && (
+                          {profile?.role !== 'reader' && (
                             <button
                               onClick={() => setDeletionModal(doc)}
                               className="p-2 hover:bg-red-50 rounded-lg transition-colors"
@@ -338,7 +344,7 @@ export default function DocumentsPage() {
                       className="p-2 hover:bg-emerald-50 rounded-lg transition-colors">
                       <Download className="w-4 h-4 text-emerald-600" />
                     </a>
-                    {profile?.role === 'admin' && (
+                    {profile?.role !== 'reader' && (
                       <button onClick={() => setDeletionModal(doc)}
                         className="p-2 hover:bg-red-50 rounded-lg transition-colors">
                         <Trash2 className="w-4 h-4 text-red-600" />

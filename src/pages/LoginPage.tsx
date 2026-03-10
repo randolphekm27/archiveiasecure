@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Building2, Lock, User, Mail, CircleUser as UserCircle2, CheckCircle, Eye, EyeOff } from 'lucide-react';
+import { Building2, Lock, User, Mail, CircleUser as UserCircle2, CheckCircle, Eye, EyeOff, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginPage() {
@@ -22,6 +22,8 @@ export default function LoginPage() {
     orgCode: '',
     adminEmail: '',
     adminName: '',
+    adminUsername: '',
+    adminJobTitle: '',
     adminPassword: '',
     confirmPassword: '',
   });
@@ -32,7 +34,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await signIn(loginForm.orgCode, loginForm.username, loginForm.password);
+      await signIn(loginForm.orgCode, loginForm.username.trim(), loginForm.password);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur de connexion');
     } finally {
@@ -64,12 +66,14 @@ export default function LoginPage() {
         adminEmail: createForm.adminEmail,
         adminPassword: createForm.adminPassword,
         adminName: createForm.adminName,
+        adminUsername: createForm.adminUsername,
+        adminJobTitle: createForm.adminJobTitle,
       });
 
-      setCreatedOrg({ code, username: 'admin' });
+      setCreatedOrg({ code, username: createForm.adminUsername });
       setLoginForm({
         orgCode: code,
-        username: 'admin',
+        username: createForm.adminUsername,
         password: createForm.adminPassword,
       });
 
@@ -170,8 +174,8 @@ export default function LoginPage() {
                     type="text"
                     required
                     value={loginForm.username}
-                    onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value.replace(/\s/g, '') })}
-                    placeholder="admin"
+                    onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
+                    placeholder="Votre identifiant"
                     className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
                   />
                 </div>
@@ -246,18 +250,54 @@ export default function LoginPage() {
                 <p className="text-xs text-slate-500 mt-1">Ce code sera utilise pour la connexion</p>
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                    Nom de l'administrateur
+                  </label>
+                  <div className="relative">
+                    <UserCircle2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <input
+                      type="text"
+                      required
+                      value={createForm.adminName}
+                      onChange={(e) => setCreateForm({ ...createForm, adminName: e.target.value })}
+                      placeholder="Prenom et nom"
+                      className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                    Fonction / Poste
+                  </label>
+                  <div className="relative">
+                    <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <input
+                      type="text"
+                      required
+                      value={createForm.adminJobTitle}
+                      onChange={(e) => setCreateForm({ ...createForm, adminJobTitle: e.target.value })}
+                      placeholder="Ex: CEO, Archiviste..."
+                      className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Nom de l'administrateur
+                  Nom d'utilisateur (pour la connexion)
                 </label>
                 <div className="relative">
-                  <UserCircle2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                   <input
                     type="text"
                     required
-                    value={createForm.adminName}
-                    onChange={(e) => setCreateForm({ ...createForm, adminName: e.target.value })}
-                    placeholder="Prenom et nom"
+                    value={createForm.adminUsername}
+                    onChange={(e) => setCreateForm({ ...createForm, adminUsername: e.target.value })}
+                    placeholder="Ex: jean.dupont"
                     className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
                   />
                 </div>
@@ -316,7 +356,7 @@ export default function LoginPage() {
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <p className="text-xs text-blue-700">
-                  Apres la creation, votre nom d'utilisateur sera <strong>admin</strong>. Utilisez-le avec le code de l'organisation pour vous connecter.
+                  Utilisez votre <strong>nom d'utilisateur</strong> et le <strong>code de l'organisation</strong> pour vous connecter.
                 </p>
               </div>
 

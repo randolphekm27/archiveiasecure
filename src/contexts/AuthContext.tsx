@@ -12,9 +12,18 @@ interface AuthContextType {
   organization: Organization | null;
   loading: boolean;
   signIn: (orgCode: string, username: string, password: string) => Promise<void>;
-  signUp: (orgCode: string, username: string, email: string, password: string, fullName: string) => Promise<void>;
+  signUp: (orgCode: string, username: string, email: string, password: string, fullName: string, jobTitle?: string) => Promise<void>;
   signOut: () => Promise<void>;
-  createOrganization: (orgData: { name: string; code: string; adminEmail: string; adminPassword: string; adminName: string }) => Promise<void>;
+  createOrganization: (orgData: { 
+    name: string; 
+    code: string; 
+    adminEmail: string; 
+    adminPassword: string; 
+    adminName: string;
+    adminUsername: string;
+    adminJobTitle: string;
+  }) => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -69,32 +78,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadProfile = async (userId: string) => {
-    const { data: profileData, error: profileError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
-
-    if (profileError) {
-      console.error('Error loading profile:', profileError);
-      return;
-    }
-
-    setProfile(profileData);
-
-    if (profileData?.organization_id) {
-      const { data: orgData, error: orgError } = await supabase
-        .from('organizations')
+    try {
+      const { data: profileData, error: profileError } = await (supabase as any)
+        .from('users')
         .select('*')
-        .eq('id', profileData.organization_id)
+        .eq('id', userId)
         .maybeSingle();
 
-      if (orgError) {
-        console.error('Error loading organization:', orgError);
-        return;
-      }
+      if (profileError) throw profileError;
+      
+      if (profileData) {
+        setProfile(profileData);
+        if (profileData.organization_id) {
+          const { data: orgData, error: orgError } = await (supabase as any)
+            .from('organizations')
+            .select('*')
+            .eq('id', profileData.organization_id)
+            .maybeSingle();
 
-      setOrganization(orgData);
+          if (orgError) throw orgError;
+          setOrganization(orgData);
+        }
+        return profileData;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error loading profile:', error);
+      return null;
+    }
+  };
+
+  const refreshProfile = async () => {
+    if (user) {
+      await loadProfile(user.id);
     }
   };
 
@@ -106,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const normalizedOrgCode = orgCode.trim().toUpperCase();
-      const normalizedUsername = username.trim().toLowerCase();
+      const normalizedUsername = username.trim().toLowerCase().replace(/\s+/g, '.');
       const virtualEmail = `${normalizedUsername}+${normalizedOrgCode}@archivia.app`.toLowerCase();
 
       const { data: authUser, error: authError } = await supabase.auth.signInWithPassword({
@@ -123,145 +139,141 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       await loadProfile(authUser.user.id);
     } catch (error) {
-      if (error instanceof Error) {
-        throw error;
-      }
+      if (error instanceof Error) throw error;
       throw new Error('Erreur de connexion');
     }
   };
 
-  const signUp = async (orgCode: string, username: string, email: string, password: string, fullName: string) => {
-    const { data: org, error: orgError } = await supabase
-      .from('organizations')
-      .select('id')
-      .eq('code', orgCode)
-      .maybeSingle();
+  const signUp = async (orgCode: string, username: string, email: string, password: string, fullName: string, jobTitle?: string) => {
+    try {
+      const { data: org, error: orgError } = await (supabase as any)
+        .from('organizations')
+        .select('id')
+        .eq('code', orgCode.toUpperCase())
+        .maybeSingle();
 
-    if (orgError || !org) {
-      throw new Error('Code organisation invalide');
-    }
+      if (orgError || !org) throw new Error('Code organisation invalide');
 
-    const virtualEmail = `${username}+${orgCode}@archivia.app`.toLowerCase();
+      const normalizedUsername = username.trim().toLowerCase().replace(/\s+/g, '.');
+      const virtualEmail = `${normalizedUsername}+${orgCode.toUpperCase()}@archivia.app`.toLowerCase();
 
-    const { data: authData, error: signUpError } = await supabase.auth.signUp({
-      email: virtualEmail,
-      password,
-    });
-
-    if (signUpError) {
-      throw signUpError;
-    }
-
-    if (authData.user) {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email: virtualEmail,
         password,
       });
 
-      if (signInError) {
-        throw signInError;
+      if (signUpError) throw signUpError;
+
+      if (authData.user) {
+        // Sign in automatically
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: virtualEmail,
+          password,
+        });
+
+        if (signInError) throw signInError;
+
+        const { error: profileError } = await (supabase as any).from('users').upsert({
+          id: authData.user.id,
+          organization_id: org.id,
+          username,
+          full_name: fullName,
+          job_title: jobTitle,
+          email: email,
+          role: 'editor',
+          updated_at: new Date().toISOString(),
+        });
+
+        if (profileError) throw profileError;
+        await loadProfile(authData.user.id);
       }
-
-      // Now insert the profile with authenticated session
-      const { error: profileError } = await supabase.from('users').insert({
-        id: authData.user.id,
-        organization_id: org.id,
-        username,
-        full_name: fullName,
-        role: 'reader',
-      });
-
-      if (profileError) {
-        throw profileError;
-      }
-
-      await loadProfile(authData.user.id);
+    } catch (error) {
+      if (error instanceof Error) throw error;
+      throw new Error('Erreur lors de l\'inscription');
     }
   };
 
-  const createOrganization = async (orgData: { name: string; code: string; adminEmail: string; adminPassword: string; adminName: string }) => {
-    const { data: existingOrg } = await supabase
-      .from('organizations')
-      .select('id')
-      .eq('code', orgData.code)
-      .maybeSingle();
+  const createOrganization = async (orgData: { 
+    name: string; 
+    code: string; 
+    adminEmail: string; 
+    adminPassword: string; 
+    adminName: string;
+    adminUsername: string;
+    adminJobTitle: string;
+  }) => {
+    try {
+      const { data: existingOrg } = await (supabase as any)
+        .from('organizations')
+        .select('id')
+        .eq('code', orgData.code.toUpperCase())
+        .maybeSingle();
 
-    if (existingOrg) {
-      throw new Error('Ce code organisation existe deja');
-    }
+      if (existingOrg) throw new Error('Ce code organisation existe deja');
 
-    const { data: org, error: orgError } = await supabase
-      .from('organizations')
-      .insert({
-        code: orgData.code,
-        name: orgData.name,
-        admin_email: orgData.adminEmail,
-      })
-      .select()
-      .single();
+      const { data: org, error: orgError } = await (supabase as any)
+        .from('organizations')
+        .insert({
+          code: orgData.code.toUpperCase(),
+          name: orgData.name,
+          admin_email: orgData.adminEmail,
+        })
+        .select()
+        .single();
 
-    if (orgError) {
-      throw orgError;
-    }
+      if (orgError) throw orgError;
 
-    const adminUsername = 'admin';
-    const virtualEmail = `${adminUsername}+${orgData.code}@archivia.app`.toLowerCase();
+      const normalizedAdminUsername = orgData.adminUsername.trim().toLowerCase().replace(/\s+/g, '.');
+      const virtualEmail = `${normalizedAdminUsername}+${orgData.code.toUpperCase()}@archivia.app`.toLowerCase();
 
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: virtualEmail,
-      password: orgData.adminPassword,
-    });
-
-    if (authError) {
-      throw authError;
-    }
-
-    if (authData.user) {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email: virtualEmail,
         password: orgData.adminPassword,
       });
 
-      if (signInError) {
-        console.error('Sign in error:', signInError);
-        throw signInError;
-      }
+      if (authError) throw authError;
 
-      const { error: profileError } = await supabase.from('users').insert({
-        id: authData.user.id,
-        organization_id: org.id,
-        username: adminUsername,
-        full_name: orgData.adminName,
-        email: orgData.adminEmail,
-        role: 'admin',
-      });
+      if (authData.user) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: virtualEmail,
+          password: orgData.adminPassword,
+        });
 
-      if (profileError) {
-        console.error('Profile creation error:', profileError);
-        throw profileError;
-      }
+        if (signInError) throw signInError;
 
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      const defaultCategories = [
-        { name: 'Administratif', description: 'Documents administratifs', color: '#3B82F6' },
-        { name: 'Finances', description: 'Documents financiers', color: '#10B981' },
-        { name: 'Ressources Humaines', description: 'Documents RH', color: '#F59E0B' },
-        { name: 'Projets', description: 'Documents de projets', color: '#8B5CF6' },
-      ];
-
-      const { error: catError } = await supabase.from('categories').insert(
-        defaultCategories.map((cat) => ({
-          ...cat,
+        const { error: profileError } = await (supabase as any).from('users').upsert({
+          id: authData.user.id,
           organization_id: org.id,
-        }))
-      );
+          username: orgData.adminUsername,
+          full_name: orgData.adminName,
+          email: orgData.adminEmail,
+          job_title: orgData.adminJobTitle,
+          role: 'admin',
+          is_active: true,
+          last_login: new Date().toISOString(),
+        });
 
-      if (catError) {
-        console.error('Categories creation error:', catError);
+        if (profileError) throw profileError;
+
+        const defaultCategories = [
+          { name: 'Administratif', description: 'Documents administratifs', color: '#3B82F6' },
+          { name: 'Finances', description: 'Documents financiers', color: '#10B981' },
+          { name: 'Ressources Humaines', description: 'Documents RH', color: '#F59E0B' },
+          { name: 'Projets', description: 'Documents de projets', color: '#8B5CF6' },
+        ];
+
+        await (supabase as any).from('categories').insert(
+          defaultCategories.map((cat) => ({
+            ...cat,
+            organization_id: org.id,
+          }))
+        );
+
+        await loadProfile(authData.user.id);
       }
-
-      await loadProfile(authData.user.id);
+    } catch (error) {
+      if (error instanceof Error) throw error;
+      throw new Error('Erreur lors de la creation de l\'organisation');
     }
   };
 
@@ -271,13 +283,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setOrganization(null);
     try {
       await supabase.auth.signOut({ scope: 'local' });
-    } catch {
-      // ignore signOut errors
+    } catch (err) {
+      console.error('Sign out error:', err);
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, organization, loading, signIn, signUp, signOut, createOrganization }}>
+    <AuthContext.Provider value={{ user, profile, organization, loading, signIn, signUp, signOut, createOrganization, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );
@@ -285,8 +297,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 }
