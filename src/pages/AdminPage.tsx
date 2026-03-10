@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Shield,
   Send,
+  Edit2,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -34,6 +35,15 @@ export default function AdminPage() {
 
   const [showUserModal, setShowUserModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showEditUserModal, setShowEditUserModal] = useState(false);
+
+  const [editingUser, setEditingUser] = useState<{
+    id: string;
+    fullName: string;
+    role: 'admin' | 'editor' | 'reader';
+    categoryIds: string[];
+  } | null>(null);
+  const [submittingUserEdit, setSubmittingUserEdit] = useState(false);
 
   const [newUser, setNewUser] = useState({
     fullName: '',
@@ -89,9 +99,9 @@ export default function AdminPage() {
       if (usersResult.data) setUsers(usersResult.data);
       if (catsResult.data) setCategories(catsResult.data);
       if (invResult.data && usersResult.data) {
-        const enriched = invResult.data.map((inv) => ({
+        const enriched = (invResult.data as any[]).map((inv) => ({
           ...inv,
-          inviter_name: usersResult.data.find((u) => u.id === inv.invited_by)?.full_name,
+          inviter_name: (usersResult.data as any[]).find((u) => u.id === inv.invited_by)?.full_name,
         }));
         setInvitations(enriched);
       }
@@ -113,7 +123,7 @@ export default function AdminPage() {
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7);
 
-      const { error: inviteError } = await supabase.from('user_invitations').insert({
+      const { error: inviteError } = await (supabase as any).from('user_invitations').insert({
         organization_id: profile.organization_id,
         email: newUser.email,
         full_name: newUser.fullName,
@@ -210,7 +220,7 @@ export default function AdminPage() {
     if (!profile?.organization_id) return;
 
     try {
-      const { error } = await supabase.from('categories').insert({
+      const { error } = await (supabase as any).from('categories').insert({
         organization_id: profile.organization_id,
         name: newCategory.name,
         description: newCategory.description,
@@ -257,28 +267,38 @@ export default function AdminPage() {
     }
   };
 
-  const handleRoleChange = async (userId: string, newRole: 'admin' | 'editor' | 'reader') => {
+  const handleEditUserSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser || !profile) return;
+    setSubmittingUserEdit(true);
+
     try {
-      const targetUser = users.find((u) => u.id === userId);
-      const { error } = await supabase.from('users').update({ role: newRole }).eq('id', userId);
+      const targetUser = users.find((u) => u.id === editingUser.id);
+      const { error } = await (supabase as any).from('users').update({
+        role: editingUser.role,
+        category_ids: editingUser.categoryIds
+      }).eq('id', editingUser.id);
+
       if (error) throw error;
 
-      if (profile) {
-        await logActivity({
-          organizationId: profile.organization_id,
-          userId: profile.id,
-          action: 'user.role_changed',
-          details: {
-            target_user: targetUser?.full_name,
-            old_role: targetUser?.role,
-            new_role: newRole,
-          },
-        });
-      }
+      await logActivity({
+        organizationId: profile.organization_id,
+        userId: profile.id,
+        action: 'user.role_changed',
+        details: {
+          target_user: targetUser?.full_name,
+          old_role: targetUser?.role,
+          new_role: editingUser.role,
+          categories_updated: true
+        },
+      });
 
+      setShowEditUserModal(false);
       await loadData();
     } catch (error) {
-      console.error('Error changing role:', error);
+      console.error('Error updating user:', error);
+    } finally {
+      setSubmittingUserEdit(false);
     }
   };
 
@@ -322,11 +342,10 @@ export default function AdminPage() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${
-                    activeTab === tab.id
-                      ? 'bg-blue-600 text-white'
-                      : 'text-slate-700 hover:bg-slate-100'
-                  }`}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${activeTab === tab.id
+                    ? 'bg-blue-600 text-white'
+                    : 'text-slate-700 hover:bg-slate-100'
+                    }`}
                 >
                   <Icon className="w-5 h-5" />
                   <span>{tab.label}</span>
@@ -375,15 +394,26 @@ export default function AdminPage() {
                       </div>
                       <div className="flex items-center gap-3">
                         {user.id !== profile?.id ? (
-                          <select
-                            value={user.role}
-                            onChange={(e) => handleRoleChange(user.id, e.target.value as any)}
-                            className={`px-3 py-1 rounded-full text-xs font-medium border-0 cursor-pointer ${badge.bg} ${badge.text}`}
-                          >
-                            <option value="reader">Lecteur</option>
-                            <option value="editor">Editeur</option>
-                            <option value="admin">Administrateur</option>
-                          </select>
+                          <div className="flex items-center gap-1">
+                            <span className={`px-3 py-1 mr-2 rounded-full text-xs font-medium ${badge.bg} ${badge.text}`}>
+                              {badge.label}
+                            </span>
+                            <button
+                              onClick={() => {
+                                setEditingUser({
+                                  id: user.id,
+                                  fullName: user.full_name,
+                                  role: user.role as any,
+                                  categoryIds: (user as any).category_ids || []
+                                });
+                                setShowEditUserModal(true);
+                              }}
+                              className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                              title="Modifier les acces"
+                            >
+                              <Edit2 className="w-4 h-4 text-slate-600" />
+                            </button>
+                          </div>
                         ) : (
                           <span className={`px-3 py-1 rounded-full text-xs font-medium ${badge.bg} ${badge.text}`}>
                             {badge.label}
@@ -728,6 +758,84 @@ export default function AdminPage() {
                   type="button"
                   onClick={() => setShowCategoryModal(false)}
                   className="px-6 py-2 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors"
+                >
+                  Annuler
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showEditUserModal && editingUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-900">
+                Modifier l'utilisateur : {editingUser.fullName}
+              </h3>
+              <button onClick={() => setShowEditUserModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditUserSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  <Shield className="w-4 h-4 inline mr-1" />
+                  Role
+                </label>
+                <select
+                  value={editingUser.role}
+                  onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as any })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  <option value="reader">Lecteur - Consultation uniquement</option>
+                  <option value="editor">Editeur - Ajout et modification de documents</option>
+                  <option value="admin">Administrateur - Acces complet</option>
+                </select>
+              </div>
+
+              {categories.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                    Categories d'acces
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 border border-slate-200 rounded-lg">
+                    {categories.map((cat) => (
+                      <label key={cat.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editingUser.categoryIds.includes(cat.id)}
+                          onChange={(e) => {
+                            const ids = e.target.checked
+                              ? [...editingUser.categoryIds, cat.id]
+                              : editingUser.categoryIds.filter((id) => id !== cat.id);
+                            setEditingUser({ ...editingUser, categoryIds: ids });
+                          }}
+                          className="rounded border-slate-300 text-blue-600"
+                        />
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }} />
+                        {cat.name}
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">Laissez vide pour autoriser toutes les categories (Comportement Admin).</p>
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="submit"
+                  disabled={submittingUserEdit}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white py-2.5 rounded-lg font-medium transition-colors"
+                >
+                  {submittingUserEdit ? 'Enregistrement...' : "Enregistrer les modifications"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowEditUserModal(false)}
+                  className="px-6 py-2.5 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors"
                 >
                   Annuler
                 </button>

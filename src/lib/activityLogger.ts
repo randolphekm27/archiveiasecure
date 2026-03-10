@@ -1,53 +1,61 @@
-import { 
-  FilePlus, 
-  FileEdit, 
-  FileX, 
-  Vote, 
-  Trash2, 
-  RefreshCcw, 
-  LogIn, 
-  LogOut, 
-  UserPlus, 
-  UserCheck, 
-  UserMinus, 
-  Shield, 
-  FolderPlus, 
-  FolderX, 
+import {
+  FilePlus,
+  FileEdit,
+  FileX,
+  Vote,
+  Trash2,
+  RefreshCcw,
+  LogIn,
+  LogOut,
+  UserPlus,
+  UserCheck,
+  UserMinus,
+  Shield,
+  FolderPlus,
+  FolderX,
   Settings,
   Activity
 } from 'lucide-react';
 import { supabase } from './supabase';
 
-export async function logActivity(params: {
+interface ActivityPayload {
   organizationId: string;
   userId: string;
   action: string;
   documentId?: string;
   details?: Record<string, unknown>;
-}) {
-  let ipAddress = 'Unknown';
-  try {
-    const response = await fetch('https://api.ipify.org?format=json');
-    const data = await response.json();
-    ipAddress = data.ip;
-  } catch (err) {
-    console.warn('Could not fetch IP address:', err);
-  }
-
-  const { error } = await (supabase as any).from('activity_logs').insert({
-    organization_id: params.organizationId,
-    user_id: params.userId,
-    action: params.action,
-    document_id: params.documentId,
-    details: params.details as any,
-    user_agent: navigator.userAgent,
-    ip_address: ipAddress,
-  });
-
-  if (error) {
-    console.error('Failed to log activity:', error);
-  }
+  ip_address?: string;
+  user_agent?: string;
 }
+
+export const logActivity = async (payload: Omit<ActivityPayload, 'ip_address' | 'user_agent'>) => {
+  try {
+    const userAgent = window.navigator.userAgent;
+
+    // Pour des raisons de sécurité (bloqueurs de pubs, proxies), on ne récupère 
+    // plus l'IP côté client via des API tierces. L'IP doit être gérée par le backend 
+    // (Edge Functions ou PostgreSQL Triggers analysant les headers web).
+    const ipAddress = 'Non disponible (Sécurité client)';
+
+    const { error } = await (supabase as any)
+      .from('activity_logs')
+      .insert({
+        organization_id: payload.organizationId,
+        user_id: payload.userId,
+        action: payload.action,
+        document_id: payload.documentId,
+        details: payload.details,
+        ip_address: ipAddress,
+        user_agent: userAgent
+      });
+
+    if (error) {
+      console.error('Failed to log activity:', error);
+    }
+  } catch (error) {
+    console.error('Error in logActivity:', error);
+  }
+};
 
 export const ACTION_LABELS: Record<string, { label: string; color: string; icon: any }> = {
   'document.upload': { label: 'Document ajout\u00e9', color: 'text-emerald-600', icon: FilePlus },

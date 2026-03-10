@@ -21,7 +21,7 @@ type Document = Database['public']['Tables']['documents']['Row'];
 type Category = Database['public']['Tables']['categories']['Row'];
 
 export default function DocumentsPage() {
-  const { profile } = useAuth();
+  const { profile, organization } = useAuth();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,10 +48,8 @@ export default function DocumentsPage() {
         .select('*')
         .eq('organization_id', profile.organization_id);
 
-      // Enforce category restrictions for non-admins
-      if (profile.role !== 'admin' && (profile as any).category_ids && (profile as any).category_ids.length > 0) {
-        docsQuery = docsQuery.in('category_id', (profile as any).category_ids);
-      }
+      // Categories are now strictly filtered via Row Level Security (RLS) policies 
+      // in the database. The client no longer needs to filter them manually.
 
       const [docsResult, catsResult] = await Promise.all([
         docsQuery.order('created_at', { ascending: false }),
@@ -93,6 +91,33 @@ export default function DocumentsPage() {
         documentId: deletionModal.id,
         details: { title: deletionModal.title, reason: deletionReason },
       });
+
+      // Notification Email aux administrateurs
+      try {
+        const { data: admins } = await supabase
+          .from('users')
+          .select('email')
+          .eq('organization_id', profile.organization_id)
+          .eq('role', 'admin');
+
+        if (admins && admins.length > 0) {
+          const adminEmails = (admins as any[]).map(a => a.email).filter(Boolean);
+
+          if (adminEmails.length > 0) {
+            await supabase.functions.invoke('send-deletion-notification', {
+              body: {
+                documentTitle: deletionModal.title,
+                requesterName: profile.full_name,
+                reason: deletionReason,
+                organizationName: organization?.name || 'Organisation',
+                adminsEmails: adminEmails,
+              },
+            });
+          }
+        }
+      } catch (emailError) {
+        console.error('Erreur lors de l\'envoi de la notification :', emailError);
+      }
 
       setDeletionSuccess(true);
       setTimeout(() => {
@@ -150,17 +175,15 @@ export default function DocumentsPage() {
         <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
           <button
             onClick={() => setViewMode('table')}
-            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              viewMode === 'table' ? 'bg-white shadow text-slate-900' : 'text-slate-600 hover:text-slate-900'
-            }`}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'table' ? 'bg-white shadow text-slate-900' : 'text-slate-600 hover:text-slate-900'
+              }`}
           >
             Liste
           </button>
           <button
             onClick={() => setViewMode('grid')}
-            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              viewMode === 'grid' ? 'bg-white shadow text-slate-900' : 'text-slate-600 hover:text-slate-900'
-            }`}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'grid' ? 'bg-white shadow text-slate-900' : 'text-slate-600 hover:text-slate-900'
+              }`}
           >
             Grille
           </button>

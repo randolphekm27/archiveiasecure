@@ -115,86 +115,12 @@ export default function DeletionRequestsPage() {
         details: { request_id: requestId, vote, comment },
       });
 
-      await checkAndResolve(requestId);
-
       setVoteComments((prev) => ({ ...prev, [requestId]: '' }));
       await loadRequests();
     } catch (error) {
       console.error('Error casting vote:', error);
     } finally {
       setSubmitting(null);
-    }
-  };
-
-  const checkAndResolve = async (requestId: string) => {
-    if (!profile) return;
-
-    const { data: reqData } = await (supabase as any)
-      .from('deletion_requests')
-      .select('*')
-      .eq('id', requestId)
-      .maybeSingle();
-
-    if (!reqData) return;
-
-    const request = requests.find((r) => r.id === requestId);
-
-    const { data: allVotes } = await (supabase as any)
-      .from('deletion_votes')
-      .select('*')
-      .eq('deletion_request_id', requestId);
-
-    if (!allVotes) return;
-
-    const approvals = allVotes.filter((v: any) => v.vote === 'approve').length;
-    const rejections = allVotes.filter((v: any) => v.vote === 'reject').length;
-    const infoNeeded = allVotes.filter((v: any) => v.vote === 'info_needed').length;
-
-    const effectiveRequired = (() => {
-      if (adminCount <= 1) return 1;
-      if (adminCount === 2) return 2;
-      return Math.min(reqData.votes_required, adminCount);
-    })();
-
-    const possibleApprovals = adminCount - rejections;
-
-    if (approvals >= effectiveRequired) {
-      await (supabase as any)
-        .from('deletion_requests')
-        .update({ status: 'approved', resolved_at: new Date().toISOString() })
-        .eq('id', requestId);
-
-      const doc = request?.document;
-      if (doc) {
-        await (supabase as any).from('secure_trash').insert({
-          organization_id: profile.organization_id,
-          document_id: reqData.document_id,
-          document_data: doc as any,
-          deletion_request_id: requestId,
-          deleted_by: profile.id,
-        });
-
-        await (supabase as any).from('documents').delete().eq('id', reqData.document_id);
-
-        await logActivity({
-          organizationId: profile.organization_id,
-          userId: profile.id,
-          action: 'document.deleted',
-          documentId: reqData.document_id,
-          details: { title: doc.title, via_request: requestId },
-        });
-      }
-    } else if (rejections >= effectiveRequired || possibleApprovals < effectiveRequired) {
-      // Reject if rejections meet the threshold OR if it's impossible to reach approvals
-      await (supabase as any)
-        .from('deletion_requests')
-        .update({ status: 'rejected', resolved_at: new Date().toISOString() })
-        .eq('id', requestId);
-    } else if (infoNeeded > 0) {
-      await (supabase as any)
-        .from('deletion_requests')
-        .update({ status: 'info_requested' })
-        .eq('id', requestId);
     }
   };
 
@@ -215,30 +141,13 @@ export default function DeletionRequestsPage() {
 
       if (voteError) throw voteError;
 
-      await (supabase as any)
-        .from('deletion_requests')
-        .update({ status: 'approved', resolved_at: new Date().toISOString() })
-        .eq('id', requestId);
-
-      if (request.document) {
-        await (supabase as any).from('secure_trash').insert({
-          organization_id: profile.organization_id,
-          document_id: request.document_id,
-          document_data: request.document as any,
-          deletion_request_id: requestId,
-          deleted_by: profile.id,
-        });
-
-        await (supabase as any).from('documents').delete().eq('id', request.document_id);
-
-        await logActivity({
-          organizationId: profile.organization_id,
-          userId: profile.id,
-          action: 'document.deleted',
-          documentId: request.document_id,
-          details: { title: request.document.title, via_request: requestId, auto_approved: true },
-        });
-      }
+      // The trigger will automatically resolve this since it meets the single-admin threshold
+      await logActivity({
+        organizationId: profile.organization_id,
+        userId: profile.id,
+        action: 'document.delete_vote',
+        details: { request_id: requestId, vote: 'approve', comment: 'Auto-approuve (administrateur unique)', auto_approved: true },
+      });
 
       await loadRequests();
     } catch (error) {
@@ -304,17 +213,15 @@ export default function DeletionRequestsPage() {
           <div className="flex gap-1">
             <button
               onClick={() => setFilter('pending')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm ${
-                filter === 'pending' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm ${filter === 'pending' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
             >
               En attente
             </button>
             <button
               onClick={() => setFilter('all')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm ${
-                filter === 'all' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
             >
               Toutes
             </button>
@@ -387,16 +294,14 @@ export default function DeletionRequestsPage() {
                         {request.votes.map((v) => (
                           <div
                             key={v.id}
-                            className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 border-white ${
-                              v.vote === 'approve'
-                                ? 'bg-green-100 text-green-700'
-                                : v.vote === 'reject'
+                            className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 border-white ${v.vote === 'approve'
+                              ? 'bg-green-100 text-green-700'
+                              : v.vote === 'reject'
                                 ? 'bg-red-100 text-red-700'
                                 : 'bg-blue-100 text-blue-700'
-                            }`}
-                            title={`${v.voter?.full_name}: ${
-                              v.vote === 'approve' ? 'Approuve' : v.vote === 'reject' ? 'Rejete' : 'Info demandee'
-                            }`}
+                              }`}
+                            title={`${v.voter?.full_name}: ${v.vote === 'approve' ? 'Approuve' : v.vote === 'reject' ? 'Rejete' : 'Info demandee'
+                              }`}
                           >
                             {v.voter?.full_name?.charAt(0) || '?'}
                           </div>
@@ -419,13 +324,12 @@ export default function DeletionRequestsPage() {
                       {request.votes.map((v) => (
                         <div key={v.id} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
                           <div
-                            className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                              v.vote === 'approve'
-                                ? 'bg-green-100'
-                                : v.vote === 'reject'
+                            className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${v.vote === 'approve'
+                              ? 'bg-green-100'
+                              : v.vote === 'reject'
                                 ? 'bg-red-100'
                                 : 'bg-blue-100'
-                            }`}
+                              }`}
                           >
                             {v.vote === 'approve' ? (
                               <CheckCircle className="w-4 h-4 text-green-600" />

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Building2, AlertCircle, CheckCircle, Shield, Lock, User, Briefcase } from 'lucide-react';
+import { Building2, AlertCircle, CheckCircle, Shield, Lock, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/activityLogger';
 
@@ -35,8 +35,6 @@ export default function JoinPage() {
 
   const [formData, setFormData] = useState({
     fullName: '',
-    username: '',
-    jobTitle: '',
     password: '',
     confirmPassword: '',
     acceptTerms: false,
@@ -122,7 +120,8 @@ export default function JoinPage() {
     setError('');
 
     try {
-      const virtualEmail = `${formData.username}+${organization.code}@archivia.app`.toLowerCase();
+      const generatedUsername = formData.fullName.trim().toLowerCase().replace(/\s+/g, '.');
+      const virtualEmail = `${generatedUsername}+${organization.code}@archivia.app`.toLowerCase();
 
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: virtualEmail,
@@ -142,9 +141,8 @@ export default function JoinPage() {
         const { error: profileError } = await (supabase as any).from('users').insert({
           id: authData.user.id,
           organization_id: organization.id,
-          username: formData.username,
+          username: generatedUsername,
           full_name: formData.fullName,
-          job_title: formData.jobTitle,
           email: invitation.email,
           role: invitation.role as any,
           category_ids: (invitation as any).category_ids || [],
@@ -307,43 +305,6 @@ export default function JoinPage() {
                       value={invitation.email}
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-600"
                     />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                      Votre fonction / Poste
-                    </label>
-                    <div className="relative">
-                      <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input
-                        type="text"
-                        required
-                        value={formData.jobTitle}
-                        onChange={(e) => setFormData({ ...formData, jobTitle: e.target.value })}
-                        className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                        placeholder="Ex: Responsable RH, Comptable..."
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                      Nom d'utilisateur
-                    </label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input
-                        type="text"
-                        required
-                        value={formData.username}
-                        onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                        className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                        placeholder="Choisissez un identifiant"
-                      />
-                    </div>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Vous utiliserez ce nom et le code <strong>{organization.code}</strong> pour vous connecter
-                    </p>
                   </div>
 
                   <div>
