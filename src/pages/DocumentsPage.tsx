@@ -31,6 +31,8 @@ export default function DocumentsPage() {
   const [submittingDeletion, setSubmittingDeletion] = useState(false);
   const [deletionSuccess, setDeletionSuccess] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
+  const [signedPreviewUrl, setSignedPreviewUrl] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -45,7 +47,7 @@ export default function DocumentsPage() {
 
       let docsQuery = (supabase as any)
         .from('documents')
-        .select('*')
+        .select('*, deletion_requests(id, status)')
         .eq('organization_id', profile.organization_id);
 
       // Categories are now strictly filtered via Row Level Security (RLS) policies 
@@ -59,7 +61,13 @@ export default function DocumentsPage() {
           .eq('organization_id', profile.organization_id),
       ]);
 
-      if (docsResult.data) setDocuments(docsResult.data);
+      if (docsResult.data) {
+        const filteredDocs = docsResult.data.filter((doc: any) => {
+          const hasPending = doc.deletion_requests?.some((req: any) => req.status === 'pending');
+          return !hasPending;
+        });
+        setDocuments(filteredDocs);
+      }
       if (catsResult.data) setCategories(catsResult.data);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -132,8 +140,66 @@ export default function DocumentsPage() {
     }
   };
 
+  const getFilePath = (fileUrl: string) => {
+    try {
+      const parts = fileUrl.split('/documents/');
+      if (parts.length > 1) {
+        return parts.slice(1).join('/documents/');
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  const handleSecureAction = async (doc: Document, action: 'open' | 'download') => {
+    try {
+      setActionLoading(`${doc.id}-${action}`);
+      const filePath = getFilePath(doc.file_url);
+
+      if (!filePath) {
+        console.error("Impossible de résoudre le chemin du fichier", doc.file_url);
+        return;
+      }
+
+      const { data, error } = await supabase.storage.from('documents').createSignedUrl(filePath, 60, {
+        download: action === 'download' ? doc.title : false,
+      });
+
+      if (error) throw error;
+
+      if (data?.signedUrl) {
+        if (action === 'download') {
+          const a = document.createElement('a');
+          a.href = data.signedUrl;
+          a.download = doc.title;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        } else {
+          window.open(data.signedUrl, '_blank');
+        }
+      }
+    } catch (err) {
+      console.error("Erreur d'accès fichier sécurisé :", err);
+      alert("Erreur lors de l'accès sécurisé au fichier.");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handlePreview = async (doc: Document) => {
     setPreviewDoc(doc);
+    setSignedPreviewUrl(null);
+
+    const filePath = getFilePath(doc.file_url);
+    if (filePath) {
+      const { data } = await supabase.storage.from('documents').createSignedUrl(filePath, 3600);
+      if (data?.signedUrl) {
+        setSignedPreviewUrl(data.signedUrl);
+      }
+    }
+
     await (supabase as any)
       .from('documents')
       .update({ views_count: (doc.views_count || 0) + 1 })
@@ -268,23 +334,22 @@ export default function DocumentsPage() {
                               <Maximize2 className="w-4 h-4 text-blue-600" />
                             </button>
                           )}
-                          <a
-                            href={doc.file_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                          <button
+                            onClick={() => handleSecureAction(doc, 'open')}
+                            className={`p-2 rounded-lg transition-colors ${actionLoading === `${doc.id}-open` ? 'opacity-50 cursor-wait bg-slate-100' : 'hover:bg-slate-100'}`}
                             title="Ouvrir"
+                            disabled={!!actionLoading}
                           >
                             <ExternalLink className="w-4 h-4 text-slate-600" />
-                          </a>
-                          <a
-                            href={doc.file_url}
-                            download
-                            className="p-2 hover:bg-emerald-50 rounded-lg transition-colors"
+                          </button>
+                          <button
+                            onClick={() => handleSecureAction(doc, 'download')}
+                            className={`p-2 rounded-lg transition-colors ${actionLoading === `${doc.id}-download` ? 'opacity-50 cursor-wait bg-emerald-50' : 'hover:bg-emerald-50'}`}
                             title="Telecharger"
+                            disabled={!!actionLoading}
                           >
                             <Download className="w-4 h-4 text-emerald-600" />
-                          </a>
+                          </button>
                           {profile?.role !== 'reader' && (
                             <button
                               onClick={() => setDeletionModal(doc)}
@@ -359,14 +424,14 @@ export default function DocumentsPage() {
                         <Maximize2 className="w-4 h-4 text-blue-600" />
                       </button>
                     )}
-                    <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
-                      className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
+                    <button onClick={() => handleSecureAction(doc, 'open')} disabled={!!actionLoading}
+                      className={`p-2 rounded-lg transition-colors ${actionLoading === `${doc.id}-open` ? 'opacity-50 cursor-wait bg-slate-100' : 'hover:bg-slate-100'}`}>
                       <ExternalLink className="w-4 h-4 text-slate-600" />
-                    </a>
-                    <a href={doc.file_url} download
-                      className="p-2 hover:bg-emerald-50 rounded-lg transition-colors">
+                    </button>
+                    <button onClick={() => handleSecureAction(doc, 'download')} disabled={!!actionLoading}
+                      className={`p-2 rounded-lg transition-colors ${actionLoading === `${doc.id}-download` ? 'opacity-50 cursor-wait bg-emerald-50' : 'hover:bg-emerald-50'}`}>
                       <Download className="w-4 h-4 text-emerald-600" />
-                    </a>
+                    </button>
                     {profile?.role !== 'reader' && (
                       <button onClick={() => setDeletionModal(doc)}
                         className="p-2 hover:bg-red-50 rounded-lg transition-colors">
@@ -398,21 +463,22 @@ export default function DocumentsPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <a
-                  href={previewDoc.file_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                <button
+                  onClick={() => handleSecureAction(previewDoc, 'open')}
+                  disabled={!!actionLoading}
+                  className={`p-2 rounded-lg transition-colors ${actionLoading === `${previewDoc.id}-open` ? 'opacity-50 cursor-wait bg-slate-100' : 'hover:bg-slate-100'}`}
+                  title="Ouvrir"
                 >
                   <ExternalLink className="w-5 h-5 text-slate-600" />
-                </a>
-                <a
-                  href={previewDoc.file_url}
-                  download
-                  className="p-2 hover:bg-emerald-50 rounded-lg transition-colors"
+                </button>
+                <button
+                  onClick={() => handleSecureAction(previewDoc, 'download')}
+                  disabled={!!actionLoading}
+                  className={`p-2 rounded-lg transition-colors ${actionLoading === `${previewDoc.id}-download` ? 'opacity-50 cursor-wait bg-emerald-50' : 'hover:bg-emerald-50'}`}
+                  title="Telecharger"
                 >
                   <Download className="w-5 h-5 text-emerald-600" />
-                </a>
+                </button>
                 <button
                   onClick={() => setPreviewDoc(null)}
                   className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
@@ -422,26 +488,30 @@ export default function DocumentsPage() {
               </div>
             </div>
             <div className="flex-1 overflow-auto bg-slate-100 p-4">
-              {['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(previewDoc.file_type.toLowerCase()) ? (
+              {!signedPreviewUrl ? (
+                <div className="flex items-center justify-center p-20 min-h-[60vh]">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                </div>
+              ) : ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(previewDoc.file_type.toLowerCase()) ? (
                 <img
-                  src={previewDoc.file_url}
+                  src={signedPreviewUrl}
                   alt={previewDoc.title}
                   className="max-w-full mx-auto rounded-lg shadow-lg"
                 />
               ) : previewDoc.file_type.toLowerCase() === 'pdf' ? (
                 <iframe
-                  src={previewDoc.file_url}
-                  className="w-full h-full min-h-[60vh] rounded-lg"
+                  src={signedPreviewUrl}
+                  className="w-full h-full min-h-[60vh] rounded-lg border-0"
                   title={previewDoc.title}
                 />
               ) : (
                 <div className="text-center py-20 text-slate-500">
                   <FileText className="w-16 h-16 mx-auto mb-3 opacity-30" />
                   <p>Apercu non disponible pour ce type de fichier</p>
-                  <a href={previewDoc.file_url} target="_blank" rel="noopener noreferrer"
-                    className="text-blue-600 hover:text-blue-700 text-sm mt-2 inline-block">
+                  <button onClick={() => handleSecureAction(previewDoc, 'open')}
+                    className="text-blue-600 hover:text-blue-700 text-sm mt-3 inline-block font-medium border border-blue-200 px-4 py-2 rounded-lg">
                     Ouvrir dans un nouvel onglet
-                  </a>
+                  </button>
                 </div>
               )}
             </div>

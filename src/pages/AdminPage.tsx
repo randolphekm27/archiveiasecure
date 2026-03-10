@@ -67,6 +67,65 @@ export default function AdminPage() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [submittingInvite, setSubmittingInvite] = useState(false);
 
+  const [editingOrg, setEditingOrg] = useState(false);
+  const [orgData, setOrgData] = useState({
+    name: '',
+    description: '',
+    phone: '',
+    website: '',
+    primary_color: '#2563EB',
+    secondary_color: '#1E40AF',
+  });
+  const [submittingOrg, setSubmittingOrg] = useState(false);
+
+  useEffect(() => {
+    if (organization) {
+      setOrgData({
+        name: organization.name || '',
+        description: (organization as any).description || '',
+        phone: (organization as any).phone || '',
+        website: (organization as any).website || '',
+        primary_color: (organization as any).primary_color || '#2563EB',
+        secondary_color: (organization as any).secondary_color || '#1E40AF',
+      });
+    }
+  }, [organization]);
+
+  const handleUpdateOrg = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profile?.organization_id) return;
+    setSubmittingOrg(true);
+
+    try {
+      const { error } = await (supabase as any).from('organizations').update({
+        name: orgData.name,
+        description: orgData.description,
+        phone: orgData.phone,
+        website: orgData.website,
+        primary_color: orgData.primary_color,
+        secondary_color: orgData.secondary_color,
+      }).eq('id', profile.organization_id);
+
+      if (error) throw error;
+
+      if (profile) {
+        await logActivity({
+          organizationId: profile.organization_id,
+          userId: profile.id,
+          action: 'organization.updated',
+          details: { fields_updated: Object.keys(orgData) }
+        });
+      }
+
+      window.location.reload();
+    } catch (error) {
+      console.error("Error updating organization:", error);
+      alert("Erreur lors de la mise à jour de l'organisation.");
+    } finally {
+      setSubmittingOrg(false);
+    }
+  };
+
   useEffect(() => {
     loadData();
   }, [profile]);
@@ -492,29 +551,95 @@ export default function AdminPage() {
 
           {activeTab === 'org' && (
             <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-slate-900">
-                Informations de l'organisation
-              </h3>
-              <div className="space-y-4">
-                {[
-                  { label: "Nom de l'organisation", value: organization?.name },
-                  { label: 'Code organisation', value: organization?.code, mono: true },
-                  { label: 'Email administrateur', value: organization?.admin_email },
-                  {
-                    label: 'Date de creation',
-                    value:
-                      organization?.created_at &&
-                      new Date(organization.created_at).toLocaleDateString('fr-FR'),
-                  },
-                ].map((item) => (
-                  <div key={item.label} className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-sm text-slate-600 mb-1">{item.label}</p>
-                    <p className={`font-medium text-slate-900 ${item.mono ? 'font-mono' : ''}`}>
-                      {item.value}
-                    </p>
-                  </div>
-                ))}
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Informations de l'organisation
+                </h3>
+                {profile?.role === 'admin' && !editingOrg && (
+                  <button onClick={() => setEditingOrg(true)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                    <Edit2 className="w-4 h-4" /> Modifier
+                  </button>
+                )}
               </div>
+
+              {!editingOrg ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[
+                    { label: "Nom de l'organisation", value: organization?.name },
+                    { label: 'Description', value: (organization as any)?.description || '-' },
+                    { label: 'Code organisation', value: organization?.code, mono: true },
+                    { label: 'Email administrateur', value: organization?.admin_email },
+                    { label: 'Telephone', value: (organization as any)?.phone || '-' },
+                    { label: 'Site Web', value: (organization as any)?.website || '-' },
+                    { label: 'Date de creation', value: organization?.created_at && new Date(organization.created_at).toLocaleDateString('fr-FR') },
+                  ].map((item) => (
+                    <div key={item.label} className="p-4 bg-slate-50 rounded-lg">
+                      <p className="text-sm text-slate-600 mb-1">{item.label}</p>
+                      <p className={`font-medium text-slate-900 ${item.mono ? 'font-mono' : ''}`}>
+                        {item.value}
+                      </p>
+                    </div>
+                  ))}
+
+                  <div className="p-4 bg-slate-50 rounded-lg col-span-1 md:col-span-2">
+                    <p className="text-sm text-slate-600 mb-2">Couleurs du thème</p>
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded border border-slate-200" style={{ backgroundColor: (organization as any)?.primary_color || '#2563EB' }} />
+                        <span className="text-sm font-mono text-slate-700">{(organization as any)?.primary_color || '#2563EB'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded border border-slate-200" style={{ backgroundColor: (organization as any)?.secondary_color || '#1E40AF' }} />
+                        <span className="text-sm font-mono text-slate-700">{(organization as any)?.secondary_color || '#1E40AF'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleUpdateOrg} className="space-y-6 bg-slate-50 p-6 rounded-xl border border-slate-200">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Nom de l'organisation</label>
+                      <input type="text" required value={orgData.name} onChange={(e) => setOrgData({ ...orgData, name: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Description</label>
+                      <textarea rows={3} value={orgData.description} onChange={(e) => setOrgData({ ...orgData, description: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none" placeholder="Brève description de votre organisation..." />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Telephone</label>
+                      <input type="text" value={orgData.phone} onChange={(e) => setOrgData({ ...orgData, phone: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="+33 1 23 45 67 89" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Site Web</label>
+                      <input type="url" value={orgData.website} onChange={(e) => setOrgData({ ...orgData, website: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="https://..." />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Couleur Primaire</label>
+                      <div className="flex gap-2">
+                        <input type="color" value={orgData.primary_color} onChange={(e) => setOrgData({ ...orgData, primary_color: e.target.value })} className="w-12 h-10 rounded-lg cursor-pointer" />
+                        <input type="text" value={orgData.primary_color} onChange={(e) => setOrgData({ ...orgData, primary_color: e.target.value })} className="flex-1 px-3 py-2 border border-slate-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none uppercase" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Couleur Secondaire</label>
+                      <div className="flex gap-2">
+                        <input type="color" value={orgData.secondary_color} onChange={(e) => setOrgData({ ...orgData, secondary_color: e.target.value })} className="w-12 h-10 rounded-lg cursor-pointer" />
+                        <input type="text" value={orgData.secondary_color} onChange={(e) => setOrgData({ ...orgData, secondary_color: e.target.value })} className="flex-1 px-3 py-2 border border-slate-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none uppercase" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 pt-4 border-t border-slate-200">
+                    <button type="submit" disabled={submittingOrg} className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white px-6 py-2.5 rounded-lg font-medium transition-colors">
+                      {submittingOrg ? 'Enregistrement...' : 'Enregistrer les modifications'}
+                    </button>
+                    <button type="button" onClick={() => setEditingOrg(false)} className="px-6 py-2.5 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-white transition-colors">
+                      Annuler
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           )}
         </div>

@@ -1,5 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-
+declare const Deno: any;
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -117,16 +117,26 @@ Deno.serve(async (req: Request) => {
       const resendData = await resendRes.json();
 
       if (!resendRes.ok) {
-        console.error("Resend error:", resendData);
+        let errorMessage = resendData.message || "Email sending failed";
+        let isTestingModeError = false;
+
+        // Add specific warning for Resend testing mode limitation
+        if (resendRes.status === 403 && resendData.name === "validation_error") {
+          errorMessage = "Le domaine d'envoi n'est pas vérifié sur Resend. Les emails ne peuvent être envoyés qu'à votre adresse personnelle vérifiée. " + errorMessage;
+          isTestingModeError = true;
+        }
+
+        console.error("Resend error:", resendData, "Is Testing Mode Restriction?", isTestingModeError);
         return new Response(
           JSON.stringify({
             success: false,
             emailSent: false,
-            error: resendData.message || "Email sending failed",
+            error: errorMessage,
+            isTestingModeError,
             invitationUrl,
           }),
           {
-            status: 200,
+            status: 200, // Important: keep 200 to allow frontend to show the URL to the user anyway
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           }
         );
