@@ -62,6 +62,8 @@ export default function AdminPage() {
   const [invitationResult, setInvitationResult] = useState<{
     url: string;
     emailSent: boolean;
+    error?: string;
+    isTestingModeError?: boolean;
   } | null>(null);
 
   const [copiedLink, setCopiedLink] = useState(false);
@@ -210,9 +212,11 @@ export default function AdminPage() {
       });
 
       let emailSent = false;
+      let error = '';
+      let isTestingModeError = false;
 
       try {
-        const { data } = await supabase.functions.invoke('send-invitation', {
+        const { data, error: invokeError } = await supabase.functions.invoke('send-invitation', {
           body: {
             to: newUser.email,
             fullName: newUser.fullName,
@@ -225,12 +229,16 @@ export default function AdminPage() {
           },
         });
 
+        if (invokeError) throw invokeError;
+
         emailSent = data?.emailSent === true;
+        error = data?.error || '';
+        isTestingModeError = data?.isTestingModeError || false;
       } catch (err) {
         console.error('Error calling send-invitation:', err);
       }
 
-      setInvitationResult({ url: invitationUrl, emailSent });
+      setInvitationResult({ url: invitationUrl, emailSent, error, isTestingModeError });
     } catch (error) {
       console.error('Error inviting user:', error);
     } finally {
@@ -660,9 +668,19 @@ export default function AdminPage() {
                       Un email a ete envoye a {newUser.email}
                     </p>
                   ) : (
-                    <p className="text-sm text-amber-600 mt-1">
-                      L'email n'a pas pu etre envoye. Partagez le lien ci-dessous manuellement.
-                    </p>
+                    <div className="mt-2 text-sm">
+                      <p className="text-amber-600 font-medium">
+                        L'email n'a pas pu etre envoye automatiquement.
+                      </p>
+                      {invitationResult.error && (
+                        <p className="text-slate-500 mt-1 text-xs px-4">
+                          {invitationResult.error}
+                        </p>
+                      )}
+                      <p className="text-slate-600 mt-2">
+                        Partagez le lien ci-dessous manuellement avec le membre.
+                      </p>
+                    </div>
                   )}
                 </div>
 
