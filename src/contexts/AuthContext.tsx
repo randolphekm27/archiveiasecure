@@ -14,11 +14,11 @@ interface AuthContextType {
   signIn: (orgCode: string, username: string, password: string) => Promise<void>;
   signUp: (orgCode: string, username: string, email: string, password: string, fullName: string, jobTitle?: string) => Promise<void>;
   signOut: () => Promise<void>;
-  createOrganization: (orgData: { 
-    name: string; 
-    code: string; 
-    adminEmail: string; 
-    adminPassword: string; 
+  createOrganization: (orgData: {
+    name: string;
+    code: string;
+    adminEmail: string;
+    adminPassword: string;
     adminName: string;
     adminUsername: string;
     adminJobTitle: string;
@@ -86,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
 
       if (profileError) throw profileError;
-      
+
       if (profileData) {
         setProfile(profileData);
         if (profileData.organization_id) {
@@ -122,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const normalizedOrgCode = orgCode.trim().toUpperCase();
-      const normalizedUsername = username.trim().toLowerCase().replace(/\s+/g, '.');
+      const normalizedUsername = username.trim().toLowerCase();
       const virtualEmail = `${normalizedUsername}+${normalizedOrgCode}@archivia.app`.toLowerCase();
 
       const { data: authUser, error: authError } = await supabase.auth.signInWithPassword({
@@ -193,11 +193,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const createOrganization = async (orgData: { 
-    name: string; 
-    code: string; 
-    adminEmail: string; 
-    adminPassword: string; 
+  const createOrganization = async (orgData: {
+    name: string;
+    code: string;
+    adminEmail: string;
+    adminPassword: string;
     adminName: string;
     adminUsername: string;
     adminJobTitle: string;
@@ -278,13 +278,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
     setOrganization(null);
     try {
       await supabase.auth.signOut({ scope: 'local' });
-    } catch (err) {
-      console.error('Sign out error:', err);
+    } catch {
+      // ignore signOut errors
     }
   };
 

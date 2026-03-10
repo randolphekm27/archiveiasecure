@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Building2, Lock, User, Mail, CircleUser as UserCircle2, CheckCircle, Eye, EyeOff, Shield } from 'lucide-react';
+import { Building2, Lock, User, Mail, CircleUser as UserCircle2, CheckCircle, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginPage() {
@@ -14,8 +14,6 @@ export default function LoginPage() {
     username: '',
     password: '',
   });
-
-  const [showPassword, setShowPassword] = useState(false);
 
   const [createForm, setCreateForm] = useState({
     orgName: '',
@@ -102,21 +100,19 @@ export default function LoginPage() {
           <div className="flex gap-2 mb-6">
             <button
               onClick={() => { setMode('login'); setError(''); }}
-              className={`flex-1 py-2.5 px-4 rounded-lg font-medium transition-all ${
-                mode === 'login'
+              className={`flex-1 py-2.5 px-4 rounded-lg font-medium transition-all ${mode === 'login'
                   ? 'bg-blue-600 text-white shadow-md'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
+                }`}
             >
               Se Connecter
             </button>
             <button
               onClick={() => { setMode('create'); setError(''); setCreatedOrg(null); }}
-              className={`flex-1 py-2.5 px-4 rounded-lg font-medium transition-all ${
-                mode === 'create'
+              className={`flex-1 py-2.5 px-4 rounded-lg font-medium transition-all ${mode === 'create'
                   ? 'bg-emerald-600 text-white shadow-md'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
+                }`}
             >
               Creer Organisation
             </button>
@@ -188,20 +184,13 @@ export default function LoginPage() {
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                   <input
-                    type={showPassword ? 'text' : 'password'}
+                    type="password"
                     required
                     value={loginForm.password}
                     onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
                     placeholder="Votre mot de passe"
-                    className="w-full pl-11 pr-11 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                    className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                  >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
                 </div>
               </div>
 
