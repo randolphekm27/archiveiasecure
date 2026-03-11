@@ -234,8 +234,21 @@ export default function AdminPage() {
         emailSent = data?.emailSent === true;
         error = data?.error || '';
         isTestingModeError = data?.isTestingModeError || false;
+
+        // If automatic email fails, create an internal notification for admins as a backup
+        if (!emailSent) {
+          await (supabase as any).from('notifications').insert({
+            organization_id: profile.organization_id,
+            user_id: profile.id,
+            title: 'Invitation crée (Email échoué)',
+            message: `L'invitation pour ${newUser.fullName} (${newUser.email}) a été créée mais l'email n'a pas pu être envoyé.`,
+            type: 'warning',
+            link_to: 'admin'
+          });
+        }
       } catch (err) {
         console.error('Error calling send-invitation:', err);
+        error = err instanceof Error ? err.message : 'Erreur inconnue lors de l\'envoi';
       }
 
       setInvitationResult({ url: invitationUrl, emailSent, error, isTestingModeError });

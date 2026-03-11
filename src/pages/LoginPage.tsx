@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Building2, Lock, User, Mail, CircleUser as UserCircle2, CheckCircle, Eye, EyeOff, Shield } from 'lucide-react';
+import { Building2, Lock, User, Mail, CircleUser as UserCircle2, CheckCircle, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginPage() {
@@ -101,8 +101,8 @@ export default function LoginPage() {
             <button
               onClick={() => { setMode('login'); setError(''); }}
               className={`flex-1 py-2.5 px-4 rounded-lg font-medium transition-all ${mode === 'login'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
             >
               Se Connecter
@@ -110,8 +110,8 @@ export default function LoginPage() {
             <button
               onClick={() => { setMode('create'); setError(''); setCreatedOrg(null); }}
               className={`flex-1 py-2.5 px-4 rounded-lg font-medium transition-all ${mode === 'create'
-                  ? 'bg-emerald-600 text-white shadow-md'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                ? 'bg-emerald-600 text-white shadow-md'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
             >
               Creer Organisation
