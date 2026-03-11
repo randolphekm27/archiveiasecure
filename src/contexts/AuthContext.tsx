@@ -24,8 +24,7 @@ interface AuthContextType {
     adminJobTitle: string;
   }) => Promise<void>;
   refreshProfile: () => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
-  resetPassword: (email: string) => Promise<void>;
+  resetPassword: (email: string, orgCode: string) => Promise<void>;
   updatePassword: (password: string) => Promise<void>;
 }
 
@@ -355,23 +354,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setOrganization(null);
   };
 
-  const signInWithGoogle = async () => {
+  const resetPassword = async (email: string, orgCode: string) => {
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/dashboard`,
-        },
-      });
-      if (error) throw error;
-    } catch (error) {
-      console.error('Error signing in with Google:', error);
-      throw error;
-    }
-  };
+      // 1. First verify the organization and user relationship in our database
+      const { data: org, error: orgError } = await (supabase as any)
+        .from('organizations')
+        .select('id')
+        .eq('code', orgCode.toUpperCase())
+        .maybeSingle();
 
-  const resetPassword = async (email: string) => {
-    try {
+      if (orgError || !org) {
+        throw new Error('Informations invalides. Veuillez vérifier l\'email et le code organisation.');
+      }
+
+      const { data: userProfile, error: profileError } = await (supabase as any)
+        .from('users')
+        .select('id')
+        .eq('email', email)
+        .eq('organization_id', org.id)
+        .maybeSingle();
+
+      if (profileError || !userProfile) {
+        // We use the same message for security (don't reveal if email or org is wrong)
+        throw new Error('Informations invalides. Veuillez vérifier l\'email et le code organisation.');
+      }
+
+      // 2. If valid, trigger Supabase's password reset
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
@@ -405,7 +413,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signOut, 
       createOrganization, 
       refreshProfile,
-      signInWithGoogle,
       resetPassword,
       updatePassword
     }}>
