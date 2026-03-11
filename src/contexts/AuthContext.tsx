@@ -129,6 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const virtualEmail = generateVirtualEmail(username, orgCode);
+      console.log('Attempting login with:', virtualEmail);
 
       // Attempt login with virtual email first (standard for this app)
       let { data: authUser, error: authError } = await supabase.auth.signInWithPassword({
@@ -151,7 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (authError) {
         if (authError.message.includes('Invalid login credentials') || authError.message.includes('User not found')) {
-          throw new Error('Identifiants ou mot de passe incorrects');
+          throw new Error('Identifiants ou mot de passe incorrects. Vérifiez votre code organisation et votre nom d\'utilisateur.');
         }
         throw authError;
       }
@@ -160,6 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await loadProfile(authUser.user.id);
       }
     } catch (error) {
+      console.error('SignIn error:', error);
       if (error instanceof Error) throw error;
       throw new Error('Erreur de connexion');
     }
@@ -185,7 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (signUpError) throw signUpError;
 
       if (authData.user) {
-        // Sign in automatically
+        // Sign in automatically to get session for RLS
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email: virtualEmail,
           password,
@@ -201,13 +203,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           job_title: jobTitle,
           email: email,
           role: 'editor',
+          is_active: true,
           updated_at: new Date().toISOString(),
         });
 
-        if (profileError) throw profileError;
+        if (profileError) {
+          console.error('Profile creation error during signup:', profileError);
+          throw new Error(`Erreur lors de la création du profil: ${profileError.message}`);
+        }
+        
         await loadProfile(authData.user.id);
       }
     } catch (error) {
+      console.error('Signup error:', error);
       if (error instanceof Error) throw error;
       throw new Error('Erreur lors de l\'inscription');
     }
@@ -223,14 +231,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     adminJobTitle: string;
   }) => {
     try {
+      // 1. Check if org code already exists
       const { data: existingOrg } = await (supabase as any)
         .from('organizations')
         .select('id')
         .eq('code', orgData.code.toUpperCase())
         .maybeSingle();
 
-      if (existingOrg) throw new Error('Ce code organisation existe deja');
+      if (existingOrg) throw new Error('Ce code organisation existe déjà.');
 
+      // 2. Create organization
       const { data: org, error: orgError } = await (supabase as any)
         .from('organizations')
         .insert({
@@ -243,23 +253,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (orgError) throw orgError;
 
+      // 3. Create auth user with virtual email
       const virtualEmail = generateVirtualEmail(orgData.adminUsername, orgData.code);
 
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: virtualEmail,
         password: orgData.adminPassword,
+        options: {
+          data: {
+            full_name: orgData.adminName,
+            is_admin: true
+          }
+        }
       });
 
       if (authError) throw authError;
 
       if (authData.user) {
+        // 4. Sign in to get session immediately
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email: virtualEmail,
           password: orgData.adminPassword,
         });
 
-        if (signInError) throw signInError;
+        if (signInError) {
+          console.error('Initial signin error:', signInError);
+          // Don't throw here, try to continue since auth user is created
+        }
 
+        // 5. Create user profile with Admin role and is_founder flag
+        // Use upsert to be safe, but it should be an insert
         const { error: profileError } = await (supabase as any).from('users').upsert({
           id: authData.user.id,
           organization_id: org.id,
@@ -268,16 +291,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: orgData.adminEmail,
           job_title: orgData.adminJobTitle,
           role: 'admin',
-          is_founder: true, // CRITICAL: Mark as founder to bypass RLS/Trigger issues
+          is_founder: true, 
           is_active: true,
           last_login: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         });
 
         if (profileError) {
-          console.error('Profile creation error:', profileError);
-          throw new Error(`Erreur lors de la creation du profil: ${profileError.message}`);
+          console.error('Profile creation error during org creation:', profileError);
+          throw new Error(`Erreur lors de la création du profil administrateur: ${profileError.message}`);
         }
 
+        // 6. Create default categories
         const defaultCategories = [
           { name: 'Administratif', description: 'Documents administratifs', color: '#3B82F6' },
           { name: 'Finances', description: 'Documents financiers', color: '#10B981' },
@@ -285,18 +310,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           { name: 'Projets', description: 'Documents de projets', color: '#8B5CF6' },
         ];
 
-        await (supabase as any).from('categories').insert(
-          defaultCategories.map((cat) => ({
-            ...cat,
-            organization_id: org.id,
-          }))
-        );
+        try {
+          await (supabase as any).from('categories').insert(
+            defaultCategories.map((cat) => ({
+              ...cat,
+              organization_id: org.id,
+            }))
+          );
+        } catch (catError) {
+          console.warn('Could not create default categories:', catError);
+          // Non-critical, continue
+        }
 
+        // 7. Finalize loading state
         await loadProfile(authData.user.id);
       }
     } catch (error) {
+      console.error('Create organization error:', error);
       if (error instanceof Error) throw error;
-      throw new Error('Erreur lors de la creation de l\'organisation');
+      throw new Error('Erreur lors de la création de l\'organisation');
     }
   };
 
