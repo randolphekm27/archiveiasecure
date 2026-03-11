@@ -130,19 +130,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const virtualEmail = generateVirtualEmail(username, orgCode);
 
-      const { data: authUser, error: authError } = await supabase.auth.signInWithPassword({
+      // Attempt login with virtual email first (standard for this app)
+      let { data: authUser, error: authError } = await supabase.auth.signInWithPassword({
         email: virtualEmail,
         password,
       });
 
+      // If that fails, try with the username/email directly as some users might try their real email
+      if (authError) {
+        const { data: directAuth, error: directError } = await supabase.auth.signInWithPassword({
+          email: username,
+          password,
+        });
+
+        if (!directError) {
+          authUser = directAuth;
+          authError = null;
+        }
+      }
+
       if (authError) {
         if (authError.message.includes('Invalid login credentials') || authError.message.includes('User not found')) {
-          throw new Error('Nom d\'utilisateur ou mot de passe incorrect');
+          throw new Error('Identifiants ou mot de passe incorrects');
         }
         throw authError;
       }
 
-      await loadProfile(authUser.user.id);
+      if (authUser?.user) {
+        await loadProfile(authUser.user.id);
+      }
     } catch (error) {
       if (error instanceof Error) throw error;
       throw new Error('Erreur de connexion');
@@ -252,11 +268,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: orgData.adminEmail,
           job_title: orgData.adminJobTitle,
           role: 'admin',
+          is_founder: true, // CRITICAL: Mark as founder to bypass RLS/Trigger issues
           is_active: true,
           last_login: new Date().toISOString(),
         });
 
-        if (profileError) throw profileError;
+        if (profileError) {
+          console.error('Profile creation error:', profileError);
+          throw new Error(`Erreur lors de la creation du profil: ${profileError.message}`);
+        }
 
         const defaultCategories = [
           { name: 'Administratif', description: 'Documents administratifs', color: '#3B82F6' },

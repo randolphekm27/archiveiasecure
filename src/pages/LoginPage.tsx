@@ -162,16 +162,18 @@ export default function LoginPage() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Nom d'utilisateur
+                  Identifiant ou Email
                 </label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <User className="h-5 w-5 text-slate-400" />
+                  </div>
                   <input
                     type="text"
                     required
                     value={loginForm.username}
-                    onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value.trim().toLowerCase().replace(/\s+/g, '.') })}
-                    placeholder="Votre identifiant"
+                    onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
+                    placeholder="jean.dupont ou votre@email.com"
                     className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
                   />
                 </div>
