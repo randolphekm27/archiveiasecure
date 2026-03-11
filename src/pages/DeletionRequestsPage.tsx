@@ -284,9 +284,16 @@ export default function DeletionRequestsPage() {
                     <p className="text-sm text-slate-600">{request.reason || 'Aucune raison fournie'}</p>
                   </div>
 
-                  <div className="flex items-center gap-4 mb-4">
+                    <div className="flex items-center gap-4 mb-4">
                     <div className="flex items-center gap-2">
                       <div className="flex -space-x-2">
+                        {/* Requester implicit approval */}
+                        <div
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 border-white bg-green-100 text-green-700"
+                          title={`${request.requester?.full_name}: Initiateur (Approuve)`}
+                        >
+                          {request.requester?.full_name?.charAt(0) || '?'}
+                        </div>
                         {request.votes.map((v) => (
                           <div
                             key={v.id}
@@ -304,13 +311,13 @@ export default function DeletionRequestsPage() {
                         ))}
                       </div>
                       <span className="text-sm text-slate-600">
-                        {approvals}/{effectiveRequired} approbation{effectiveRequired > 1 ? 's' : ''}
+                        {approvals + 1}/{effectiveRequired} approbation{effectiveRequired > 1 ? 's' : ''}
                       </span>
                     </div>
                     <div className="h-2 flex-1 bg-slate-200 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-green-500 rounded-full transition-all"
-                        style={{ width: `${Math.min((approvals / effectiveRequired) * 100, 100)}%` }}
+                        style={{ width: `${Math.min(((approvals + 1) / effectiveRequired) * 100, 100)}%` }}
                       />
                     </div>
                   </div>
