@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import {
   Activity,
   Filter,
-  User,
   Clock,
   FileText,
   Search,
@@ -48,6 +47,7 @@ export default function ActivityLogPage() {
         .from('activity_logs')
         .select('*')
         .eq('organization_id', profile.organization_id)
+        .gte('created_at', profile.created_at)
         .order('created_at', { ascending: false })
         .range(page * pageSize, (page + 1) * pageSize - 1);
 
@@ -83,11 +83,11 @@ export default function ActivityLogPage() {
 
   const filteredLogs = searchQuery
     ? logs.filter(
-        (log) =>
-          log.user?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          log.document?.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          log.action.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+      (log) =>
+        log.user?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        log.document?.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        log.action.toLowerCase().includes(searchQuery.toLowerCase())
+    )
     : logs;
 
   const uniqueActions = [...new Set(logs.map((l) => l.action))];
@@ -224,12 +224,12 @@ export default function ActivityLogPage() {
                     <div className="flex items-center gap-3 flex-shrink-0">
                       <span className="text-sm text-slate-500 flex items-center gap-1">
                         <Clock className="w-3.5 h-3.5" />
-                        {new Date(log.created_at).toLocaleDateString('fr-FR', {
+                        {log.created_at ? new Date(log.created_at).toLocaleDateString('fr-FR', {
                           day: 'numeric',
                           month: 'short',
                           hour: '2-digit',
-                          minute: '2-digit',
-                        })}
+                          minute: '2-digit'
+                        }) : 'Date inconnue'}
                       </span>
                       {isExpanded ? (
                         <ChevronUp className="w-4 h-4 text-slate-400" />

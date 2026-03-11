@@ -33,6 +33,7 @@ export default function SecureTrashPage() {
         .select('*')
         .eq('organization_id', profile.organization_id)
         .is('restored_at', null)
+        .gte('created_at', profile.created_at)
         .order('created_at', { ascending: false });
 
       if (!trashData) return;

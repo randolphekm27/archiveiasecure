@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Bell, X, Check, Info, AlertTriangle, CheckCircle, Trash2, Clock } from 'lucide-react';
+import { Bell, X, Info, AlertTriangle, CheckCircle, Trash2, Clock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import type { Database } from '../lib/database.types';
@@ -41,6 +41,7 @@ export default function NotificationsPanel({ onNavigate }: NotificationsPanelPro
       .from('notifications')
       .select('*')
       .eq('user_id', profile.id)
+      .gte('created_at', profile.created_at)
       .order('created_at', { ascending: false })
       .limit(20);
 
@@ -157,9 +158,8 @@ export default function NotificationsPanel({ onNavigate }: NotificationsPanelPro
               notifications.map((notification) => (
                 <div
                   key={notification.id}
-                  className={`flex items-start gap-3 px-4 py-3 border-b border-slate-100 last:border-0 cursor-pointer transition-colors hover:bg-slate-50 ${
-                    !notification.is_read ? 'bg-blue-50/40' : ''
-                  }`}
+                  className={`flex items-start gap-3 px-4 py-3 border-b border-slate-100 last:border-0 cursor-pointer transition-colors hover:bg-slate-50 ${!notification.is_read ? 'bg-blue-50/40' : ''
+                    }`}
                   onClick={() => handleNotificationClick(notification)}
                 >
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${getTypeBg(notification.type)}`}>
@@ -179,12 +179,12 @@ export default function NotificationsPanel({ onNavigate }: NotificationsPanelPro
                     )}
                     <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
                       <Clock className="w-3 h-3" />
-                      {new Date(notification.created_at).toLocaleDateString('fr-FR', {
+                      {notification.created_at ? new Date(notification.created_at).toLocaleDateString('fr-FR', {
                         day: 'numeric',
                         month: 'short',
                         hour: '2-digit',
                         minute: '2-digit',
-                      })}
+                      }) : 'Date inconnue'}
                     </p>
                   </div>
                   <button

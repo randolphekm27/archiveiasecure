@@ -487,28 +487,30 @@ export default function AdminPage() {
                             <span className={`px-3 py-1 mr-2 rounded-full text-xs font-medium ${badge.bg} ${badge.text}`}>
                               {badge.label}
                             </span>
-                            <button
-                              onClick={() => {
-                                setEditingUser({
-                                  id: user.id,
-                                  fullName: user.full_name,
-                                  role: user.role as any,
-                                  categoryIds: (user as any).category_ids || []
-                                });
-                                setShowEditUserModal(true);
-                              }}
-                              className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                              title="Modifier les acces"
-                            >
-                              <Edit2 className="w-4 h-4 text-slate-600" />
-                            </button>
+                            {!(user as any).is_founder && (
+                              <button
+                                onClick={() => {
+                                  setEditingUser({
+                                    id: user.id,
+                                    fullName: user.full_name,
+                                    role: user.role as any,
+                                    categoryIds: (user as any).category_ids || []
+                                  });
+                                  setShowEditUserModal(true);
+                                }}
+                                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                                title="Modifier les acces"
+                              >
+                                <Edit2 className="w-4 h-4 text-slate-600" />
+                              </button>
+                            )}
                           </div>
                         ) : (
                           <span className={`px-3 py-1 rounded-full text-xs font-medium ${badge.bg} ${badge.text}`}>
                             {badge.label}
                           </span>
                         )}
-                        {user.id !== profile?.id && (
+                        {user.id !== profile?.id && !(user as any).is_founder && (
                           <button
                             onClick={() => handleDeleteUser(user.id)}
                             className="p-2 hover:bg-red-50 rounded-lg transition-colors"

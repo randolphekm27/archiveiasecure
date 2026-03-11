@@ -153,7 +153,7 @@ export default function LoginPage() {
                     type="text"
                     required
                     value={loginForm.orgCode}
-                    onChange={(e) => setLoginForm({ ...loginForm, orgCode: e.target.value.toUpperCase() })}
+                    onChange={(e) => setLoginForm({ ...loginForm, orgCode: e.target.value.trim().toUpperCase() })}
                     placeholder="Ex: MEMP_2024"
                     className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
                   />
@@ -170,7 +170,7 @@ export default function LoginPage() {
                     type="text"
                     required
                     value={loginForm.username}
-                    onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
+                    onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value.trim().toLowerCase().replace(/\s+/g, '.') })}
                     placeholder="Votre identifiant"
                     className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
                   />
@@ -231,7 +231,7 @@ export default function LoginPage() {
                     type="text"
                     required
                     value={createForm.orgCode}
-                    onChange={(e) => setCreateForm({ ...createForm, orgCode: e.target.value.replace(/\s/g, '_').toUpperCase() })}
+                    onChange={(e) => setCreateForm({ ...createForm, orgCode: e.target.value.trim().replace(/\s/g, '_').toUpperCase() })}
                     placeholder="Ex: MEMP_2024"
                     className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition font-mono"
                   />
@@ -285,7 +285,7 @@ export default function LoginPage() {
                     type="text"
                     required
                     value={createForm.adminUsername}
-                    onChange={(e) => setCreateForm({ ...createForm, adminUsername: e.target.value })}
+                    onChange={(e) => setCreateForm({ ...createForm, adminUsername: e.target.value.trim().toLowerCase().replace(/\s+/g, '.') })}
                     placeholder="Ex: jean.dupont"
                     className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
                   />

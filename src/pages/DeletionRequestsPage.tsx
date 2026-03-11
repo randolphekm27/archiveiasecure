@@ -50,6 +50,7 @@ export default function DeletionRequestsPage() {
           .select('*')
           .eq('organization_id', profile.organization_id)
           .in('status', filter === 'pending' ? ['pending', 'info_requested'] : ['pending', 'approved', 'rejected', 'info_requested'])
+          .gte('created_at', profile.created_at)
           .order('created_at', { ascending: false }),
         supabase.from('users').select('*').eq('organization_id', profile.organization_id),
         supabase.from('documents').select('*').eq('organization_id', profile.organization_id),

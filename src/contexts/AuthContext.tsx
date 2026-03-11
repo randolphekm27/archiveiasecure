@@ -28,6 +28,13 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Helper to ensure consistent virtual email generation
+const generateVirtualEmail = (username: string, orgCode: string): string => {
+  const normalizedUsername = username.trim().toLowerCase().replace(/\s+/g, '.');
+  const normalizedOrgCode = orgCode.trim().toUpperCase();
+  return `${normalizedUsername}+${normalizedOrgCode}@archivia.app`.toLowerCase();
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -121,9 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await supabase.auth.signOut({ scope: 'local' });
       }
 
-      const normalizedOrgCode = orgCode.trim().toUpperCase();
-      const normalizedUsername = username.trim().toLowerCase().replace(/\s+/g, '.');
-      const virtualEmail = `${normalizedUsername}+${normalizedOrgCode}@archivia.app`.toLowerCase();
+      const virtualEmail = generateVirtualEmail(username, orgCode);
 
       const { data: authUser, error: authError } = await supabase.auth.signInWithPassword({
         email: virtualEmail,
@@ -154,8 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (orgError || !org) throw new Error('Code organisation invalide');
 
-      const normalizedUsername = username.trim().toLowerCase().replace(/\s+/g, '.');
-      const virtualEmail = `${normalizedUsername}+${orgCode.toUpperCase()}@archivia.app`.toLowerCase();
+      const virtualEmail = generateVirtualEmail(username, orgCode);
 
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email: virtualEmail,
@@ -176,7 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { error: profileError } = await (supabase as any).from('users').upsert({
           id: authData.user.id,
           organization_id: org.id,
-          username,
+          username: username.trim().toLowerCase().replace(/\s+/g, '.'),
           full_name: fullName,
           job_title: jobTitle,
           email: email,
@@ -223,8 +227,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (orgError) throw orgError;
 
-      const normalizedAdminUsername = orgData.adminUsername.trim().toLowerCase().replace(/\s+/g, '.');
-      const virtualEmail = `${normalizedAdminUsername}+${orgData.code.toUpperCase()}@archivia.app`.toLowerCase();
+      const virtualEmail = generateVirtualEmail(orgData.adminUsername, orgData.code);
 
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: virtualEmail,
@@ -244,7 +247,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { error: profileError } = await (supabase as any).from('users').upsert({
           id: authData.user.id,
           organization_id: org.id,
-          username: orgData.adminUsername,
+          username: orgData.adminUsername.trim().toLowerCase().replace(/\s+/g, '.'),
           full_name: orgData.adminName,
           email: orgData.adminEmail,
           job_title: orgData.adminJobTitle,

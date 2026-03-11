@@ -39,7 +39,7 @@ export default function SearchPage() {
 
       let docsQuery = supabase
         .from('documents')
-        .select('*')
+        .select('*, deletion_requests(id, status)')
         .eq('organization_id', profile.organization_id);
 
       let catsQuery = supabase
@@ -59,7 +59,13 @@ export default function SearchPage() {
         catsQuery
       ]);
 
-      if (docsResult.data) setDocuments(docsResult.data);
+      if (docsResult.data) {
+        const filteredDocs = docsResult.data.filter((doc: any) => {
+          const hasPending = doc.deletion_requests?.some((req: any) => req.status === 'pending');
+          return !hasPending;
+        });
+        setDocuments(filteredDocs);
+      }
       if (catsResult.data) setCategories(catsResult.data);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -75,7 +81,7 @@ export default function SearchPage() {
       const query = searchQuery.toLowerCase();
       results = results.filter(doc =>
         doc.title.toLowerCase().includes(query) ||
-        doc.keywords.some(k => k.toLowerCase().includes(query))
+        (doc.keywords && doc.keywords.some((k: string) => k.toLowerCase().includes(query)))
       );
     }
 
@@ -84,11 +90,11 @@ export default function SearchPage() {
     }
 
     if (filters.startDate) {
-      results = results.filter(doc => doc.document_date >= filters.startDate);
+      results = results.filter(doc => doc.document_date && doc.document_date >= filters.startDate);
     }
 
     if (filters.endDate) {
-      results = results.filter(doc => doc.document_date <= filters.endDate);
+      results = results.filter(doc => doc.document_date && doc.document_date <= filters.endDate);
     }
 
     if (filters.importantOnly) {
@@ -249,7 +255,7 @@ export default function SearchPage() {
                   <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
                     <span className="flex items-center gap-1">
                       <Calendar className="w-3.5 h-3.5" />
-                      {new Date(doc.document_date).toLocaleDateString('fr-FR')}
+                      {doc.document_date ? new Date(doc.document_date).toLocaleDateString('fr-FR') : 'Date inconnue'}
                     </span>
                     <span
                       className="px-2 py-0.5 rounded text-xs font-medium"
@@ -260,7 +266,7 @@ export default function SearchPage() {
                     >
                       {getCategoryName(doc.category_id)}
                     </span>
-                    {doc.keywords.length > 0 && (
+                    {doc.keywords && doc.keywords.length > 0 && (
                       <span className="flex items-center gap-1">
                         <Tag className="w-3.5 h-3.5" />
                         {doc.keywords.slice(0, 3).join(', ')}
