@@ -15,6 +15,7 @@ import SecureTrashPage from './pages/SecureTrashPage';
 import ActivityLogPage from './pages/ActivityLogPage';
 import StatisticsPage from './pages/StatisticsPage';
 import GovernancePage from './pages/GovernancePage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 
 function AppRoutes() {
   const { user, loading } = useAuth();
@@ -64,6 +65,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/" replace />} />
       <Route path="/join/:token" element={<JoinPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route
         path="/*"
         element={
