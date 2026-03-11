@@ -83,11 +83,12 @@ export default function DocumentsPage() {
     setSubmittingDeletion(true);
 
     try {
-      const { error } = await (supabase as any).from('deletion_requests').insert({
+      const { error } = await supabase.from('deletion_requests').insert({
         organization_id: profile.organization_id,
         document_id: deletionModal.id,
         requested_by: profile.id,
         reason: deletionReason,
+        votes_required: organization?.deletion_votes_required || 3
       });
 
       if (error) throw error;
@@ -298,7 +299,7 @@ export default function DocumentsPage() {
                         <div className="flex items-center gap-2 text-slate-600">
                           <Calendar className="w-4 h-4" />
                           <span className="text-sm">
-                            {new Date(doc.document_date).toLocaleDateString('fr-FR')}
+                            {doc.document_date ? new Date(doc.document_date).toLocaleDateString('fr-FR') : 'Date inconnue'}
                           </span>
                         </div>
                       </td>
@@ -314,10 +315,10 @@ export default function DocumentsPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        {doc.keywords.length > 0 ? (
+                        {doc.keywords && doc.keywords.length > 0 ? (
                           <div className="flex items-center gap-1 text-slate-600">
                             <Tag className="w-3.5 h-3.5" />
-                            <span className="text-sm">{doc.keywords.slice(0, 2).join(', ')}</span>
+                            <span className="text-sm">{(doc.keywords || []).slice(0, 2).join(', ')}</span>
                           </div>
                         ) : (
                           <span className="text-sm text-slate-400">-</span>
@@ -396,7 +397,7 @@ export default function DocumentsPage() {
                   )}
                   <div className="flex items-center gap-2 text-xs text-slate-500 mb-3">
                     <Calendar className="w-3.5 h-3.5" />
-                    {new Date(doc.document_date).toLocaleDateString('fr-FR')}
+                    {doc.document_date ? new Date(doc.document_date).toLocaleDateString('fr-FR') : 'Date inconnue'}
                     <span className="px-2 py-0.5 rounded-full text-xs"
                       style={{
                         backgroundColor: `${getCategoryColor(doc.category_id)}15`,
@@ -406,9 +407,9 @@ export default function DocumentsPage() {
                       {getCategoryName(doc.category_id)}
                     </span>
                   </div>
-                  {doc.keywords.length > 0 && (
+                  {doc.keywords && doc.keywords.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-3">
-                      {doc.keywords.slice(0, 3).map((kw) => (
+                      {(doc.keywords || []).slice(0, 3).map((kw) => (
                         <span key={kw} className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs rounded-full">
                           {kw}
                         </span>
@@ -459,7 +460,7 @@ export default function DocumentsPage() {
               <div>
                 <h3 className="font-semibold text-slate-900">{previewDoc.title}</h3>
                 <p className="text-sm text-slate-500">
-                  {previewDoc.file_type.toUpperCase()} - {new Date(previewDoc.document_date).toLocaleDateString('fr-FR')}
+                  {previewDoc.file_type.toUpperCase()} - {previewDoc.document_date ? new Date(previewDoc.document_date).toLocaleDateString('fr-FR') : 'Date inconnue'}
                 </p>
               </div>
               <div className="flex items-center gap-2">

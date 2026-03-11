@@ -581,6 +581,7 @@ export type Database = {
     Functions: {
       get_user_organization_id: { Args: never; Returns: string }
       get_user_role: { Args: never; Returns: string }
+      restore_document: { Args: { trash_id: string }; Returns: string }
     }
     Enums: {
       [_ in never]: never

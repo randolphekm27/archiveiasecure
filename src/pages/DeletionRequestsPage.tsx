@@ -45,20 +45,15 @@ export default function DeletionRequestsPage() {
 
     try {
       const [reqResult, usersResult, docsResult, votesResult] = await Promise.all([
-        (() => {
-          let query = (supabase as any)
-            .from('deletion_requests')
-            .select('*')
-            .eq('organization_id', profile.organization_id)
-            .order('created_at', { ascending: false });
-          if (filter === 'pending') {
-            query = query.in('status', ['pending', 'info_requested']);
-          }
-          return query;
-        })(),
-        (supabase as any).from('users').select('*').eq('organization_id', profile.organization_id),
-        (supabase as any).from('documents').select('*').eq('organization_id', profile.organization_id),
-        (supabase as any).from('deletion_votes').select('*'),
+        supabase
+          .from('deletion_requests')
+          .select('*')
+          .eq('organization_id', profile.organization_id)
+          .in('status', filter === 'pending' ? ['pending', 'info_requested'] : ['pending', 'approved', 'rejected', 'info_requested'])
+          .order('created_at', { ascending: false }),
+        supabase.from('users').select('*').eq('organization_id', profile.organization_id),
+        supabase.from('documents').select('*').eq('organization_id', profile.organization_id),
+        supabase.from('deletion_votes').select('*'),
       ]);
 
       const users = usersResult.data || [];
@@ -99,7 +94,7 @@ export default function DeletionRequestsPage() {
     try {
       const comment = voteComments[requestId] || null;
 
-      const { error: voteError } = await (supabase as any).from('deletion_votes').insert({
+      const { error: voteError } = await supabase.from('deletion_votes').insert({
         deletion_request_id: requestId,
         voter_id: profile.id,
         vote,
@@ -132,7 +127,7 @@ export default function DeletionRequestsPage() {
       const request = requests.find((r) => r.id === requestId);
       if (!request) return;
 
-      const { error: voteError } = await (supabase as any).from('deletion_votes').insert({
+      const { error: voteError } = await supabase.from('deletion_votes').insert({
         deletion_request_id: requestId,
         voter_id: profile.id,
         vote: 'approve',
@@ -267,13 +262,13 @@ export default function DeletionRequestsPage() {
                           </span>
                           <span className="flex items-center gap-1 text-sm text-slate-500">
                             <Clock className="w-3.5 h-3.5" />
-                            {new Date(request.created_at).toLocaleDateString('fr-FR', {
+                            {request.created_at ? new Date(request.created_at).toLocaleDateString('fr-FR', {
                               day: 'numeric',
                               month: 'short',
                               year: 'numeric',
                               hour: '2-digit',
                               minute: '2-digit',
-                            })}
+                            }) : 'Date inconnue'}
                           </span>
                         </div>
                       </div>
@@ -346,7 +341,7 @@ export default function DeletionRequestsPage() {
                             )}
                           </div>
                           <span className="text-xs text-slate-400">
-                            {new Date(v.created_at).toLocaleDateString('fr-FR')}
+                            {v.created_at ? new Date(v.created_at).toLocaleDateString('fr-FR') : 'Date inconnue'}
                           </span>
                         </div>
                       ))}

@@ -65,28 +65,13 @@ export default function SecureTrashPage() {
     setRestoring(item.id);
 
     try {
-      const docData = item.document_data as Record<string, any>;
-
-      const { error: insertError } = await supabase.from('documents').insert({
-        id: item.document_id,
-        organization_id: docData.organization_id,
-        title: docData.title,
-        file_url: docData.file_url,
-        file_type: docData.file_type,
-        document_date: docData.document_date,
-        category_id: docData.category_id,
-        keywords: docData.keywords || [],
-        uploaded_by: docData.uploaded_by,
-        is_important: docData.is_important || false,
+      const { error: restoreError } = await supabase.rpc('restore_document', {
+        trash_id: item.id
       });
 
-      if (insertError) throw insertError;
+      if (restoreError) throw restoreError;
 
-      await supabase
-        .from('secure_trash')
-        .update({ restored_at: new Date().toISOString() })
-        .eq('id', item.id);
-
+      const docData = item.document_data as Record<string, any>;
       await logActivity({
         organizationId: profile.organization_id,
         userId: profile.id,
@@ -96,8 +81,10 @@ export default function SecureTrashPage() {
       });
 
       await loadTrash();
+      alert('Document restauré avec succès !');
     } catch (error) {
       console.error('Error restoring document:', error);
+      alert('Erreur lors de la restauration du document.');
     } finally {
       setRestoring(null);
     }
@@ -168,7 +155,7 @@ export default function SecureTrashPage() {
                         </span>
                         <span className="flex items-center gap-1 text-sm text-slate-500">
                           <Clock className="w-3.5 h-3.5" />
-                          {new Date(item.created_at).toLocaleDateString('fr-FR')}
+                          {item.created_at ? new Date(item.created_at).toLocaleDateString('fr-FR') : 'Date inconnue'}
                         </span>
                       </div>
                     </div>
@@ -176,17 +163,15 @@ export default function SecureTrashPage() {
                   <div className="flex items-center gap-4">
                     <div className="text-right">
                       <span
-                        className={`text-sm font-medium ${
-                          daysLeft <= 7 ? 'text-red-600' : daysLeft <= 14 ? 'text-amber-600' : 'text-slate-600'
-                        }`}
+                        className={`text-sm font-medium ${daysLeft <= 7 ? 'text-red-600' : daysLeft <= 14 ? 'text-amber-600' : 'text-slate-600'
+                          }`}
                       >
                         {daysLeft} jour{daysLeft > 1 ? 's' : ''} restant{daysLeft > 1 ? 's' : ''}
                       </span>
                       <div className="w-24 h-1.5 bg-slate-200 rounded-full mt-1">
                         <div
-                          className={`h-full rounded-full transition-all ${
-                            daysLeft <= 7 ? 'bg-red-500' : daysLeft <= 14 ? 'bg-amber-500' : 'bg-green-500'
-                          }`}
+                          className={`h-full rounded-full transition-all ${daysLeft <= 7 ? 'bg-red-500' : daysLeft <= 14 ? 'bg-amber-500' : 'bg-green-500'
+                            }`}
                           style={{ width: `${(daysLeft / 30) * 100}%` }}
                         />
                       </div>
