@@ -129,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const virtualEmail = generateVirtualEmail(username, orgCode);
-      console.log('Attempting login with:', virtualEmail);
+      console.log(`[Auth] Attempting login: Org=${orgCode}, User=${username} -> vEmail=${virtualEmail}`);
 
       // Attempt login with virtual email first (standard for this app)
       let { data: authUser, error: authError } = await supabase.auth.signInWithPassword({
@@ -138,7 +138,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       // If that fails, try with the username/email directly as some users might try their real email
+      // Note: This only works if their auth account was created with their real email, 
+      // which happens in some alternate signup flows or legacy data.
       if (authError) {
+        console.warn(`[Auth] Virtual email login failed: ${authError.message}. Trying direct email...`);
         const { data: directAuth, error: directError } = await supabase.auth.signInWithPassword({
           email: username,
           password,
@@ -147,21 +150,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!directError) {
           authUser = directAuth;
           authError = null;
+        } else {
+          console.error(`[Auth] Direct login also failed: ${directError.message}`);
         }
       }
 
       if (authError) {
         if (authError.message.includes('Invalid login credentials') || authError.message.includes('User not found')) {
-          throw new Error('Identifiants ou mot de passe incorrects. Vérifiez votre code organisation et votre nom d\'utilisateur.');
+          throw new Error('Identifiants ou mot de passe incorrects. Rappelez-vous que vous devez utiliser votre nom d’utilisateur (ex: jean.dupont) et non votre email si vous avez créé une organisation.');
         }
         throw authError;
       }
 
       if (authUser?.user) {
-        await loadProfile(authUser.user.id);
+        const profile = await loadProfile(authUser.user.id);
+        if (!profile) {
+          console.error('[Auth] Login succeeded but profile is missing in the users table.');
+          throw new Error('Votre compte est actif mais votre profil est manquant. Veuillez contacter l’administrateur.');
+        }
       }
     } catch (error) {
-      console.error('SignIn error:', error);
+      console.error('SignIn error details:', error);
       if (error instanceof Error) throw error;
       throw new Error('Erreur de connexion');
     }
