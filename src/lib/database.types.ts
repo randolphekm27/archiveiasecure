@@ -582,6 +582,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_auth_email_for_reset: {
+        Args: { organization_code: string; real_email: string }
+        Returns: string | null
+      }
       get_user_organization_id: { Args: never; Returns: string }
       get_user_role: { Args: never; Returns: string }
       restore_document: { Args: { trash_id: string }; Returns: string }
