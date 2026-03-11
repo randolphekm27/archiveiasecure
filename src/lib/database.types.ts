@@ -519,6 +519,7 @@ export type Database = {
           full_name: string
           id: string
           is_active: boolean | null
+          is_founder: boolean | null
           job_title: string | null
           last_login: string | null
           organization_id: string
@@ -537,6 +538,7 @@ export type Database = {
           full_name: string
           id: string
           is_active?: boolean | null
+          is_founder?: boolean | null
           job_title?: string | null
           last_login?: string | null
           organization_id: string
@@ -555,6 +557,7 @@ export type Database = {
           full_name?: string
           id?: string
           is_active?: boolean | null
+          is_founder?: boolean | null
           job_title?: string | null
           last_login?: string | null
           organization_id?: string
@@ -582,6 +585,10 @@ export type Database = {
       get_user_organization_id: { Args: never; Returns: string }
       get_user_role: { Args: never; Returns: string }
       restore_document: { Args: { trash_id: string }; Returns: string }
+      verify_user_and_org: {
+        Args: { organization_code: string; user_email: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never

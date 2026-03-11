@@ -356,25 +356,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const resetPassword = async (email: string, orgCode: string) => {
     try {
-      // 1. First verify the organization and user relationship in our database
-      const { data: org, error: orgError } = await (supabase as any)
-        .from('organizations')
-        .select('id')
-        .eq('code', orgCode.toUpperCase())
-        .maybeSingle();
+      // 1. First verify the organization and user relationship securely using a database RPC
+      // This bypasses RLS policies that prevent anonymous users from selecting from the users table.
+      const { data: isValid, error: rpcError } = await supabase.rpc('verify_user_and_org', {
+        user_email: email,
+        organization_code: orgCode.toUpperCase()
+      });
 
-      if (orgError || !org) {
-        throw new Error('Informations invalides. Veuillez vérifier l\'email et le code organisation.');
-      }
+      if (rpcError) throw rpcError;
 
-      const { data: userProfile, error: profileError } = await (supabase as any)
-        .from('users')
-        .select('id')
-        .eq('email', email)
-        .eq('organization_id', org.id)
-        .maybeSingle();
-
-      if (profileError || !userProfile) {
+      if (!isValid) {
         // We use the same message for security (don't reveal if email or org is wrong)
         throw new Error('Informations invalides. Veuillez vérifier l\'email et le code organisation.');
       }
