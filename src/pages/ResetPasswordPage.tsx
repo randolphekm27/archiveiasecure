@@ -1,55 +1,90 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, CheckCircle, AlertCircle, Building2 } from 'lucide-react';
+import { Lock, CheckCircle, AlertCircle, Building2, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+
+type PageState = 'loading' | 'ready' | 'error' | 'success';
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [pageState, setPageState] = useState<PageState>('loading');
   const { updatePassword } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check if we have a recovery session
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setError('Le lien de récupération est invalide ou a expiré. Veuillez demander un nouveau lien.');
+    /**
+     * Supabase sends the recovery token in the URL hash:
+     * /reset-password#access_token=xxx&type=recovery&...
+     *
+     * The Supabase JS client automatically exchanges this hash for a session
+     * when `onAuthStateChange` fires with the PASSWORD_RECOVERY event.
+     * We must WAIT for this event before showing the form.
+     */
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' && session) {
+        // Token is valid - show the form
+        setPageState('ready');
+      } else if (event === 'SIGNED_IN' && session) {
+        // Sometimes the event is SIGNED_IN instead of PASSWORD_RECOVERY
+        // Check the URL hash to confirm this is a recovery flow
+        if (window.location.hash.includes('type=recovery')) {
+          setPageState('ready');
+        }
       }
+    });
+
+    // Safety timeout: if after 5 seconds no recovery event fired,
+    // check if the hash is completely missing (direct navigation, not from email link)
+    const timeout = setTimeout(() => {
+      setPageState((current) => {
+        if (current === 'loading') {
+          const hash = window.location.hash;
+          if (!hash || !hash.includes('access_token')) {
+            return 'error';
+          }
+          // Hash exists but event didn't fire yet — keep waiting a bit more
+          return 'loading';
+        }
+        return current;
+      });
+    }, 5000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
     };
-    checkSession();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setFormError('');
 
     if (password !== confirmPassword) {
-      setError('Les mots de passe ne correspondent pas');
+      setFormError('Les mots de passe ne correspondent pas');
       return;
     }
 
-    if (password.length < 6) {
-      setError('Le mot de passe doit contenir au moins 6 caractères');
+    if (password.length < 8) {
+      setFormError('Le mot de passe doit contenir au moins 8 caractères');
       return;
     }
 
-    setLoading(true);
+    setSubmitting(true);
 
     try {
       await updatePassword(password);
-      setSuccess(true);
+      setPageState('success');
       setTimeout(() => {
-        navigate('/');
+        navigate('/login');
       }, 3000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur lors de la mise à jour du mot de passe');
+      setFormError(err instanceof Error ? err.message : 'Erreur lors de la mise à jour du mot de passe');
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
@@ -65,7 +100,37 @@ export default function ResetPasswordPage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl p-8">
-          {success ? (
+          {/* --- LOADING --- */}
+          {pageState === 'loading' && (
+            <div className="text-center py-8">
+              <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+              <p className="text-slate-600 font-medium">Vérification du lien de récupération...</p>
+              <p className="text-slate-400 text-sm mt-2">Veuillez patienter quelques secondes</p>
+            </div>
+          )}
+
+          {/* --- ERROR: invalid/expired link --- */}
+          {pageState === 'error' && (
+            <div className="text-center py-4">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="w-8 h-8 text-red-600" />
+              </div>
+              <h2 className="text-xl font-bold text-slate-900 mb-2">Lien invalide ou expiré</h2>
+              <p className="text-slate-600 mb-6">
+                Ce lien de récupération est invalide ou a expiré. Les liens sont valables <strong>1 heure</strong>.
+                Veuillez soumettre une nouvelle demande.
+              </p>
+              <button
+                onClick={() => navigate('/login')}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition-colors shadow-lg shadow-blue-600/30"
+              >
+                Retour à la connexion
+              </button>
+            </div>
+          )}
+
+          {/* --- SUCCESS --- */}
+          {pageState === 'success' && (
             <div className="text-center py-4">
               <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <CheckCircle className="w-8 h-8 text-emerald-600" />
@@ -75,18 +140,21 @@ export default function ResetPasswordPage() {
                 Votre mot de passe a été modifié avec succès. Vous allez être redirigé vers la page de connexion.
               </p>
               <button
-                onClick={() => navigate('/')}
+                onClick={() => navigate('/login')}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition-colors"
               >
                 Aller à la connexion
               </button>
             </div>
-          ) : (
+          )}
+
+          {/* --- FORM --- */}
+          {pageState === 'ready' && (
             <>
-              {error && (
+              {formError && (
                 <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex gap-3 text-red-700 text-sm">
-                  <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                  <p>{error}</p>
+                  <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                  <p>{formError}</p>
                 </div>
               )}
 
@@ -102,7 +170,7 @@ export default function ResetPasswordPage() {
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Au moins 6 caractères"
+                      placeholder="Au moins 8 caractères"
                       className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
                     />
                   </div>
@@ -127,10 +195,15 @@ export default function ResetPasswordPage() {
 
                 <button
                   type="submit"
-                  disabled={loading || !!error}
+                  disabled={submitting}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-600/30"
                 >
-                  {loading ? 'Mise à jour...' : 'Enregistrer le mot de passe'}
+                  {submitting ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Mise à jour...
+                    </span>
+                  ) : 'Enregistrer le mot de passe'}
                 </button>
               </form>
             </>
@@ -138,7 +211,7 @@ export default function ResetPasswordPage() {
         </div>
 
         <p className="text-center text-sm text-slate-500 mt-6">
-          ArchivIA Pro - Sécurité maximale
+          ArchivIA Pro — Sécurité maximale
         </p>
       </div>
     </div>
