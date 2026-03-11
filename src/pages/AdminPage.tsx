@@ -77,6 +77,9 @@ export default function AdminPage() {
     website: '',
     primary_color: '#2563EB',
     secondary_color: '#1E40AF',
+    accent_color: '#6366F1',
+    font_family: 'Inter',
+    deletion_votes_required: 3,
   });
   const [submittingOrg, setSubmittingOrg] = useState(false);
 
@@ -89,6 +92,9 @@ export default function AdminPage() {
         website: (organization as any).website || '',
         primary_color: (organization as any).primary_color || '#2563EB',
         secondary_color: (organization as any).secondary_color || '#1E40AF',
+        accent_color: (organization as any).accent_color || '#6366F1',
+        font_family: (organization as any).font_family || 'Inter',
+        deletion_votes_required: (organization as any).deletion_votes_required || 3,
       });
     }
   }, [organization]);
@@ -106,6 +112,9 @@ export default function AdminPage() {
         website: orgData.website,
         primary_color: orgData.primary_color,
         secondary_color: orgData.secondary_color,
+        accent_color: orgData.accent_color,
+        font_family: orgData.font_family,
+        deletion_votes_required: orgData.deletion_votes_required,
       }).eq('id', profile.organization_id);
 
       if (error) throw error;
@@ -541,7 +550,7 @@ export default function AdminPage() {
                         className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
                         style={{ backgroundColor: `${cat.color}20` }}
                       >
-                        <FolderOpen className="w-5 h-5" style={{ color: cat.color }} />
+                        <FolderOpen className="w-5 h-5" style={{ color: cat.color || '#3B82F6' }} />
                       </div>
                       <div className="min-w-0">
                         <p className="font-medium text-slate-900">{cat.name}</p>
@@ -593,6 +602,7 @@ export default function AdminPage() {
                     { label: 'Telephone', value: (organization as any)?.phone || '-' },
                     { label: 'Site Web', value: (organization as any)?.website || '-' },
                     { label: 'Date de creation', value: organization?.created_at && new Date(organization.created_at).toLocaleDateString('fr-FR') },
+                    { label: 'Votes requis pour suppression', value: (organization as any)?.deletion_votes_required || '3' },
                   ].map((item) => (
                     <div key={item.label} className="p-4 bg-slate-50 rounded-lg">
                       <p className="text-sm text-slate-600 mb-1">{item.label}</p>
@@ -612,6 +622,14 @@ export default function AdminPage() {
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded border border-slate-200" style={{ backgroundColor: (organization as any)?.secondary_color || '#1E40AF' }} />
                         <span className="text-sm font-mono text-slate-700">{(organization as any)?.secondary_color || '#1E40AF'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded border border-slate-200" style={{ backgroundColor: (organization as any)?.accent_color || '#6366F1' }} />
+                        <span className="text-sm font-mono text-slate-700">{(organization as any)?.accent_color || '#6366F1'} (Accent)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-slate-600">Police :</span>
+                        <span className="text-sm font-medium text-slate-900">{(organization as any)?.font_family || 'Inter'}</span>
                       </div>
                     </div>
                   </div>
@@ -643,11 +661,24 @@ export default function AdminPage() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Couleur Secondaire</label>
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Couleur d'Accent</label>
                       <div className="flex gap-2">
-                        <input type="color" value={orgData.secondary_color} onChange={(e) => setOrgData({ ...orgData, secondary_color: e.target.value })} className="w-12 h-10 rounded-lg cursor-pointer" />
-                        <input type="text" value={orgData.secondary_color} onChange={(e) => setOrgData({ ...orgData, secondary_color: e.target.value })} className="flex-1 px-3 py-2 border border-slate-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none uppercase" />
+                        <input type="color" value={orgData.accent_color} onChange={(e) => setOrgData({ ...orgData, accent_color: e.target.value })} className="w-12 h-10 rounded-lg cursor-pointer" />
+                        <input type="text" value={orgData.accent_color} onChange={(e) => setOrgData({ ...orgData, accent_color: e.target.value })} className="flex-1 px-3 py-2 border border-slate-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none uppercase" />
                       </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Typographie (Police)</label>
+                      <select value={orgData.font_family} onChange={(e) => setOrgData({ ...orgData, font_family: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                        <option value="Inter">Inter (Defaut)</option>
+                        <option value="Roboto">Roboto</option>
+                        <option value="Outfit">Outfit</option>
+                        <option value="Poppins">Poppins</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Votes de suppression requis</label>
+                      <input type="number" min="1" max="10" value={orgData.deletion_votes_required} onChange={(e) => setOrgData({ ...orgData, deletion_votes_required: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
                     </div>
                   </div>
 
@@ -796,7 +827,7 @@ export default function AdminPage() {
                               }}
                               className="rounded border-slate-300 text-blue-600"
                             />
-                            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }} />
+                            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: (cat.color || '#3B82F6') as string }} />
                             {cat.name}
                           </label>
                         ))}
@@ -971,7 +1002,7 @@ export default function AdminPage() {
                           }}
                           className="rounded border-slate-300 text-blue-600"
                         />
-                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }} />
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: (cat.color || '#3B82F6') as string }} />
                         {cat.name}
                       </label>
                     ))}

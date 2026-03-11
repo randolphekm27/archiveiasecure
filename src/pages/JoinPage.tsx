@@ -120,17 +120,59 @@ export default function JoinPage() {
     setError('');
 
     try {
-      const generatedUsername = formData.fullName.trim().toLowerCase().replace(/\s+/g, '.');
-      const virtualEmail = `${generatedUsername}+${organization.code}@archivia.app`.toLowerCase();
+      // 1. Check if email is already taken in the public.users table
+      const { data: existingEmailUser, error: checkEmailError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', invitation.email)
+        .maybeSingle();
 
+      if (checkEmailError) throw checkEmailError;
+
+      if (existingEmailUser) {
+        throw new Error('Un compte existe déjà avec cette adresse email.');
+      }
+
+      // 2. Generate a unique technical username for login (transparent to user)
+      const baseUsername = formData.fullName.trim().toLowerCase().replace(/\s+/g, '.');
+
+      let finalUsername = baseUsername;
+      let counter = 0;
+      let isUnique = false;
+
+      while (!isUnique && counter < 10) {
+        const checkUsername = counter === 0 ? baseUsername : `${baseUsername}.${Math.floor(Math.random() * 1000)}`;
+        const { data: userWithUsername } = await supabase
+          .from('users')
+          .select('id')
+          .eq('organization_id', organization.id)
+          .eq('username', checkUsername)
+          .maybeSingle();
+
+        if (!userWithUsername) {
+          finalUsername = checkUsername;
+          isUnique = true;
+        }
+        counter++;
+      }
+
+      const virtualEmail = `${finalUsername}+${organization.code}@archivia.app`.toLowerCase();
+
+      // 3. Auth Sign Up
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: virtualEmail,
         password: formData.password,
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        if (authError.message.includes('already registered')) {
+          throw new Error('Ce compte a déjà été créé. Si vous avez perdu votre accès, contactez votre administrateur.');
+        }
+        throw authError;
+      }
 
       if (authData.user) {
+        // 4. Sign In
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email: virtualEmail,
           password: formData.password,
@@ -138,18 +180,23 @@ export default function JoinPage() {
 
         if (signInError) throw signInError;
 
+        // 5. Create Profile
         const { error: profileError } = await (supabase as any).from('users').insert({
           id: authData.user.id,
           organization_id: organization.id,
-          username: generatedUsername,
-          full_name: formData.fullName,
-          email: invitation.email,
+          username: finalUsername, // Technical unique identifier
+          full_name: formData.fullName, // User display name
+          email: invitation.email, // Real email from invitation
           role: invitation.role as any,
           category_ids: (invitation as any).category_ids || [],
         });
 
-        if (profileError) throw profileError;
+        if (profileError) {
+          console.error("Profile creation error:", profileError);
+          throw new Error("Le compte a été créé mais le profil n'a pas pu être finalisé. Veuillez contacter le support.");
+        }
 
+        // 5. Mark Invitation as Accepted
         const { error: updateError } = await (supabase as any)
           .from('user_invitations')
           .update({ accepted_at: new Date().toISOString() })
@@ -174,11 +221,7 @@ export default function JoinPage() {
     } catch (err) {
       console.error('Error accepting invitation:', err);
       if (err instanceof Error) {
-        if (err.message.includes('already registered')) {
-          setError('Un compte existe deja avec ce nom d\'utilisateur. Essayez un autre nom.');
-        } else {
-          setError(err.message);
-        }
+        setError(err.message);
       } else {
         setError("Erreur lors de l'acceptation de l'invitation");
       }

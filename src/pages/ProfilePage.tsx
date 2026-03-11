@@ -34,6 +34,9 @@ export default function ProfilePage() {
   const [editData, setEditData] = useState({
     fullName: '',
     jobTitle: '',
+    department: '',
+    phoneExtension: '',
+    signature: '',
   });
 
   useEffect(() => {
@@ -42,6 +45,9 @@ export default function ProfilePage() {
       setEditData({
         fullName: profile.full_name || '',
         jobTitle: (profile as any).job_title || '',
+        department: (profile as any).department || '',
+        phoneExtension: (profile as any).phone_extension || '',
+        signature: (profile as any).signature || '',
       });
     }
   }, [profile]);
@@ -76,12 +82,15 @@ export default function ProfilePage() {
         .update({
           full_name: editData.fullName,
           job_title: editData.jobTitle,
+          department: editData.department,
+          phone_extension: editData.phoneExtension,
+          signature: editData.signature,
         })
         .eq('id', profile.id);
 
       if (error) throw error;
       setEditing(false);
-      
+
       alert('Profil mis a jour avec succes !');
       await refreshProfile();
     } catch (error) {
@@ -186,6 +195,42 @@ export default function ProfilePage() {
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Departement / Service
+                </label>
+                <input
+                  type="text"
+                  value={editData.department}
+                  onChange={(e) => setEditData({ ...editData, department: e.target.value })}
+                  placeholder="Ex: Ressources Humaines"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Extension Téléphonique
+                </label>
+                <input
+                  type="text"
+                  value={editData.phoneExtension}
+                  onChange={(e) => setEditData({ ...editData, phoneExtension: e.target.value })}
+                  placeholder="Ex: 405"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Signature ou Mention Légale
+                </label>
+                <textarea
+                  value={editData.signature}
+                  onChange={(e) => setEditData({ ...editData, signature: e.target.value })}
+                  placeholder="Votre signature automatique pour les exports..."
+                  rows={2}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                />
+              </div>
             </div>
             <div className="flex justify-end">
               <button
@@ -209,17 +254,32 @@ export default function ProfilePage() {
 
             <div className="p-4 bg-slate-50 rounded-lg">
               <div className="flex items-center gap-2 mb-1">
+                <Building2 className="w-4 h-4 text-slate-600" />
+                <p className="text-sm text-slate-600">Departement</p>
+              </div>
+              <p className="font-medium text-slate-900">{(profile as any)?.department || 'Non defini'}</p>
+            </div>
+
+            <div className="p-4 bg-slate-50 rounded-lg">
+              <div className="flex items-center gap-2 mb-1">
+                <Activity className="w-4 h-4 text-slate-600" />
+                <p className="text-sm text-slate-600">Extension</p>
+              </div>
+              <p className="font-medium text-slate-900">{(profile as any)?.phone_extension || '-'}</p>
+            </div>
+
+            <div className="p-4 bg-slate-50 rounded-lg">
+              <div className="flex items-center gap-2 mb-1">
                 <Shield className="w-4 h-4 text-slate-600" />
                 <p className="text-sm text-slate-600">Role</p>
               </div>
               <span
-                className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${
-                  profile?.role === 'admin'
-                    ? 'bg-rose-100 text-rose-700'
-                    : profile?.role === 'editor'
+                className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${profile?.role === 'admin'
+                  ? 'bg-rose-100 text-rose-700'
+                  : profile?.role === 'editor'
                     ? 'bg-blue-100 text-blue-700'
                     : 'bg-slate-100 text-slate-700'
-                }`}
+                  }`}
               >
                 {getRoleFr()}
               </span>
@@ -305,12 +365,12 @@ export default function ProfilePage() {
                   </div>
                   <span className="text-xs text-slate-500 flex items-center gap-1 flex-shrink-0">
                     <Clock className="w-3 h-3" />
-                    {new Date(log.created_at).toLocaleDateString('fr-FR', {
+                    {log.created_at ? new Date(log.created_at).toLocaleDateString('fr-FR', {
                       day: 'numeric',
                       month: 'short',
                       hour: '2-digit',
                       minute: '2-digit',
-                    })}
+                    }) : '-'}
                   </span>
                 </div>
               );
