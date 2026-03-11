@@ -83,6 +83,12 @@ export default function DocumentsPage() {
     setSubmittingDeletion(true);
 
     try {
+      if (!profile?.organization_id) {
+        throw new Error("Session non identifiée. Veuillez vous reconnecter.");
+      }
+
+      console.log(`[Deletion] Requesting for doc: ${deletionModal.id}`);
+
       const { error } = await supabase.from('deletion_requests').insert({
         organization_id: profile.organization_id,
         document_id: deletionModal.id,
@@ -91,7 +97,10 @@ export default function DocumentsPage() {
         votes_required: organization?.deletion_votes_required || 3
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('[Deletion] Database error:', error);
+        throw new Error(`Erreur lors de la demande : ${error.message}`);
+      }
 
       await logActivity({
         organizationId: profile.organization_id,
@@ -106,8 +115,8 @@ export default function DocumentsPage() {
         const { data: admins } = await supabase
           .from('users')
           .select('email')
-          .eq('organization_id', profile.organization_id)
-          .eq('role', 'admin');
+          .filter('organization_id', 'eq', profile.organization_id)
+          .filter('role', 'eq', 'admin');
 
         if (admins && admins.length > 0) {
           const adminEmails = (admins as any[]).map(a => a.email).filter(Boolean);
@@ -125,17 +134,22 @@ export default function DocumentsPage() {
           }
         }
       } catch (emailError) {
-        console.error('Erreur lors de l\'envoi de la notification :', emailError);
+        console.warn('[Deletion] Could not send notification email:', emailError);
       }
 
       setDeletionSuccess(true);
+      
+      // Force reload list if it was auto-approved/deleted immediately
+      await loadData();
+
       setTimeout(() => {
         setDeletionModal(null);
         setDeletionReason('');
         setDeletionSuccess(false);
       }, 2000);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error requesting deletion:', error);
+      alert(error.message || "Une erreur est survenue lors de la demande de suppression.");
     } finally {
       setSubmittingDeletion(false);
     }
