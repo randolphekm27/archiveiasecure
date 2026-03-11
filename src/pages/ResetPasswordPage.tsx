@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, CheckCircle, AlertCircle, Building2, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,92 +15,56 @@ export default function ResetPasswordPage() {
   const [pageState, setPageState] = useState<PageState>('loading');
   const { updatePassword } = useAuth();
   const navigate = useNavigate();
-  const isReadyRef = useRef(false);
 
   useEffect(() => {
-    let timeoutId: ReturnType<typeof setTimeout>;
+    let mounted = true;
+    let safetyTimeout: ReturnType<typeof setTimeout>;
 
-    const activateForm = () => {
-      if (!isReadyRef.current) {
-        isReadyRef.current = true;
-        setPageState('ready');
-        clearTimeout(timeoutId);
-      }
-    };
-
-    const showError = () => {
-      if (!isReadyRef.current) {
-        setPageState('error');
-      }
-    };
-
-    // Strategy 1: Listen to Supabase auth event (most reliable)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (
-        (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') &&
-        session
-      ) {
-        // Double-check it's really a recovery flow via the URL hash
-        const hash = window.location.hash;
-        if (
-          event === 'PASSWORD_RECOVERY' ||
-          (event === 'SIGNED_IN' && hash.includes('type=recovery'))
-        ) {
-          activateForm();
-        }
-      }
-    });
-
-    // Strategy 2: Parse the URL hash directly (fallback for when event fires
-    // before our listener was registered)
-    const parseHashAndSetSession = async () => {
-      const hash = window.location.hash.substring(1);
-      if (!hash) {
-        // No hash at all — likely a direct navigation to this page
-        timeoutId = setTimeout(showError, 3000);
-        return;
-      }
-
-      const params = new URLSearchParams(hash);
-      const accessToken = params.get('access_token');
-      const refreshToken = params.get('refresh_token');
-      const type = params.get('type');
-
-      if (type !== 'recovery' || !accessToken || !refreshToken) {
-        // Hash exists but not a recovery type
-        timeoutId = setTimeout(showError, 3000);
-        return;
-      }
-
-      // Explicitly set the session from the hash tokens
+    const handleSession = async () => {
       try {
-        const { data, error } = await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken,
-        });
+        // 1. Vérifier si on a un code dans l'URL (PKCE flow)
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
 
-        if (error || !data.session) {
-          console.error('setSession error:', error);
-          showError();
+        if (code) {
+          // Échanger le code contre une session
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) throw error;
+        }
+
+        // 2. Vérifier si on a une session active
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (session?.user) {
+          if (mounted) setPageState('ready');
           return;
         }
 
-        // Session is valid — show the form
-        activateForm();
+        // 3. Pas de session encore — attendre l'event PASSWORD_RECOVERY (5s)
+        safetyTimeout = setTimeout(() => {
+          if (mounted) setPageState('error');
+        }, 5000);
+
       } catch (err) {
-        console.error('Failed to set session from hash:', err);
-        showError();
+        console.error('[Reset] Error:', err);
+        if (mounted) setPageState('error');
       }
     };
 
-    parseHashAndSetSession();
+    // Écouter les événements d'auth Supabase
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if ((event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && session)) && mounted) {
+        clearTimeout(safetyTimeout);
+        setPageState('ready');
+      }
+    });
 
-    // Strategy 3: Long safety timeout as last resort (60 seconds)
-    timeoutId = setTimeout(showError, 60000);
+    handleSession();
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
-      clearTimeout(timeoutId);
+      clearTimeout(safetyTimeout);
     };
   }, []);
 
@@ -112,20 +76,16 @@ export default function ResetPasswordPage() {
       setFormError('Les mots de passe ne correspondent pas');
       return;
     }
-
     if (password.length < 8) {
       setFormError('Le mot de passe doit contenir au moins 8 caractères');
       return;
     }
 
     setSubmitting(true);
-
     try {
       await updatePassword(password);
       setPageState('success');
-      setTimeout(() => {
-        navigate('/login');
-      }, 3000);
+      setTimeout(() => navigate('/login'), 3000);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Erreur lors de la mise à jour du mot de passe');
     } finally {
@@ -133,11 +93,25 @@ export default function ResetPasswordPage() {
     }
   };
 
+  const strengthLevel = (() => {
+    if (password.length < 6) return 0;
+    if (password.length < 9) return 1;
+    if (password.length < 12) return 2;
+    return 3;
+  })();
+
+  const strengthConfig = [
+    { label: 'Trop court', color: 'bg-red-400' },
+    { label: 'Acceptable', color: 'bg-orange-400' },
+    { label: 'Bon', color: 'bg-yellow-400' },
+    { label: 'Excellent', color: 'bg-green-500' },
+  ];
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-4 shadow-lg shadow-blue-600/30">
             <Building2 className="w-9 h-9 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-slate-900 mb-2">ArchivIA Pro</h1>
@@ -146,16 +120,16 @@ export default function ResetPasswordPage() {
 
         <div className="bg-white rounded-2xl shadow-xl p-8">
 
-          {/* ── LOADING ── */}
+          {/* LOADING */}
           {pageState === 'loading' && (
             <div className="text-center py-10">
               <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
-              <p className="text-slate-700 font-medium">Vérification en cours...</p>
-              <p className="text-slate-400 text-sm mt-2">Validation du lien de récupération</p>
+              <p className="text-slate-700 font-medium">Vérification du lien...</p>
+              <p className="text-slate-400 text-sm mt-2">Validation en cours, veuillez patienter</p>
             </div>
           )}
 
-          {/* ── ERROR ── */}
+          {/* ERROR */}
           {pageState === 'error' && (
             <div className="text-center py-4">
               <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -165,7 +139,7 @@ export default function ResetPasswordPage() {
               <p className="text-slate-600 mb-6">
                 Ce lien de récupération est invalide ou a expiré.
                 Les liens sont valables <strong>1 heure</strong>.
-                Veuillez soumettre une nouvelle demande de réinitialisation.
+                Veuillez soumettre une nouvelle demande.
               </p>
               <button
                 onClick={() => navigate('/login')}
@@ -176,7 +150,7 @@ export default function ResetPasswordPage() {
             </div>
           )}
 
-          {/* ── SUCCESS ── */}
+          {/* SUCCESS */}
           {pageState === 'success' && (
             <div className="text-center py-4">
               <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -196,11 +170,11 @@ export default function ResetPasswordPage() {
             </div>
           )}
 
-          {/* ── FORM ── */}
+          {/* FORM */}
           {pageState === 'ready' && (
             <>
               {formError && (
-                <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex gap-3 text-red-700 text-sm">
+                <div className="mb-5 p-4 bg-red-50 border border-red-200 rounded-lg flex gap-3 text-red-700 text-sm">
                   <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
                   <p>{formError}</p>
                 </div>
@@ -210,6 +184,7 @@ export default function ResetPasswordPage() {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">
                     Nouveau mot de passe
+                    <span className="text-slate-400 font-normal ml-1">(min. 8 caractères)</span>
                   </label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -219,7 +194,7 @@ export default function ResetPasswordPage() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Au moins 8 caractères"
-                      className="w-full pl-11 pr-14 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                      className="w-full pl-11 pr-16 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
                     />
                     <button
                       type="button"
@@ -229,6 +204,24 @@ export default function ResetPasswordPage() {
                       {showPassword ? 'Masquer' : 'Voir'}
                     </button>
                   </div>
+
+                  {password.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      <div className="flex gap-1">
+                        {[0, 1, 2, 3].map((level) => (
+                          <div
+                            key={level}
+                            className={`h-1.5 flex-1 rounded-full transition-colors ${
+                              level <= strengthLevel
+                                ? strengthConfig[strengthLevel].color
+                                : 'bg-slate-200'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                      <p className="text-xs text-slate-500">{strengthConfig[strengthLevel].label}</p>
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -243,48 +236,22 @@ export default function ResetPasswordPage() {
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="Répétez votre nouveau mot de passe"
-                      className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                      className={`w-full pl-11 pr-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition ${
+                        confirmPassword && confirmPassword !== password
+                          ? 'border-red-300 bg-red-50'
+                          : 'border-slate-300'
+                      }`}
                     />
+                    {confirmPassword && confirmPassword === password && (
+                      <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" />
+                    )}
                   </div>
                 </div>
 
-                {/* Password strength indicator */}
-                {password.length > 0 && (
-                  <div className="space-y-1">
-                    <div className="flex gap-1">
-                      {[1, 2, 3, 4].map((level) => (
-                        <div
-                          key={level}
-                          className={`h-1 flex-1 rounded-full transition-colors ${
-                            password.length >= level * 3
-                              ? level <= 1
-                                ? 'bg-red-400'
-                                : level <= 2
-                                ? 'bg-orange-400'
-                                : level <= 3
-                                ? 'bg-yellow-400'
-                                : 'bg-green-500'
-                              : 'bg-slate-200'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                    <p className="text-xs text-slate-500">
-                      {password.length < 6
-                        ? 'Trop court'
-                        : password.length < 9
-                        ? 'Acceptable'
-                        : password.length < 12
-                        ? 'Bon'
-                        : 'Excellent'}
-                    </p>
-                  </div>
-                )}
-
                 <button
                   type="submit"
-                  disabled={submitting}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-600/30"
+                  disabled={submitting || password.length < 8 || password !== confirmPassword}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-600/30 mt-2"
                 >
                   {submitting ? (
                     <span className="flex items-center justify-center gap-2">
@@ -292,7 +259,7 @@ export default function ResetPasswordPage() {
                       Mise à jour...
                     </span>
                   ) : (
-                    'Enregistrer le mot de passe'
+                    'Enregistrer le nouveau mot de passe'
                   )}
                 </button>
               </form>
