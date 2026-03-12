@@ -356,7 +356,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const resetPassword = async (email: string, orgCode: string) => {
     try {
-      // 1. Verify the user and organization match securely (SECURITY DEFINER bypass RLS)
+      // 1. Vérifier que l'utilisateur et l'organisation correspondent (SECURITY DEFINER bypass RLS)
       const { data: isValid, error: rpcError } = await supabase.rpc('verify_user_and_org', {
         user_email: email,
         organization_code: orgCode.toUpperCase()
@@ -365,11 +365,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (rpcError) throw rpcError;
 
       if (!isValid) {
-        // Generic message to avoid revealing which field is wrong (security)
         throw new Error('Informations invalides. Veuillez vérifier l\'email et le code organisation.');
       }
 
-      // 2. Get the virtual auth email (email used in auth.users) via a SECURITY DEFINER function
+      // 2. Récupérer le virtual email (email utilisé dans auth.users) via SECURITY DEFINER
       const { data: virtualEmail, error: virtualEmailError } = await supabase.rpc('get_auth_email_for_reset', {
         real_email: email,
         organization_code: orgCode.toUpperCase()
@@ -379,34 +378,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error('Informations invalides. Veuillez vérifier l\'email et le code organisation.');
       }
 
-      // 3. Generate the reset link from Supabase using the virtual email
-      // This sets the token in the DB and generates a link pointing to our /reset-password page.
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(virtualEmail, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-      if (resetError) throw resetError;
-
-      // 4. Now send the email to the REAL email address via Resend through our Edge Function
+      // 3. Appeler l'Edge Function qui va:
+      //    - Générer le vrai lien de reset avec token via Admin API (service_role_key côté serveur)
+      //    - Envoyer l'email à l'adresse réelle via Resend
+      // NOTE: On NE génère PAS le lien côté client, le token doit être généré côté serveur.
       const supabaseUrl = 'https://ndnrtzcdlvvitkqygmtp.supabase.co';
-      const resetLink = `${window.location.origin}/reset-password`;
-
-      const { data: { session } } = await supabase.auth.getSession();
+      const redirectTo = `${window.location.origin}/reset-password`;
       const anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5kbnJ0emNkbHZ2aXRrcXlnbXRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDE0NDI1OTksImV4cCI6MjA1NzAxODU5OX0.K4uFEIxbilC4KsMo8C6AoUSJSwkE-IjLaKxLimPQOcg';
 
-      await fetch(`${supabaseUrl}/functions/v1/send-password-reset`, {
+      const response = await fetch(`${supabaseUrl}/functions/v1/send-password-reset`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token || anonKey}`,
+          'Authorization': `Bearer ${anonKey}`,
           'Apikey': anonKey,
         },
         body: JSON.stringify({
           realEmail: email,
-          resetLink,
+          virtualEmail,
+          redirectTo,
         }),
       });
-      // Note: even if the edge function fails, the reset was triggered.
-      // The user message will indicate success.
+
+      const result = await response.json();
+      if (!result.success && result.error) {
+        throw new Error(result.error);
+      }
     } catch (error) {
       console.error('Error resetting password:', error);
       throw error;
