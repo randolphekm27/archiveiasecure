@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import {
-  BarChart3,
   FileText,
   Users,
   FolderOpen,
@@ -14,12 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import type { Database } from '../lib/database.types';
 
-type Document = Database['public']['Tables']['documents']['Row'];
-type Category = Database['public']['Tables']['categories']['Row'];
-type UserProfile = Database['public']['Tables']['users']['Row'];
-type ActivityLog = Database['public']['Tables']['activity_logs']['Row'];
 
 interface Stats {
   totalDocuments: number;
@@ -58,7 +52,6 @@ export default function StatisticsPage() {
   });
   const [categoryStats, setCategoryStats] = useState<CategoryStat[]>([]);
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
-  const [recentActivity, setRecentActivity] = useState<(ActivityLog & { user_name?: string })[]>([]);
   const [topUploaders, setTopUploaders] = useState<{ name: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -79,18 +72,16 @@ export default function StatisticsPage() {
         catsQuery = catsQuery.in('id', (profile as any).category_ids);
       }
 
-      const [docsResult, usersResult, catsResult, logsResult, deletionsResult] = await Promise.all([
+      const [docsResult, usersResult, catsResult, deletionsResult] = await Promise.all([
         docsQuery,
         supabase.from('users').select('*').eq('organization_id', (profile as any).organization_id),
         catsQuery,
-        supabase.from('activity_logs').select('*').eq('organization_id', (profile as any).organization_id).order('created_at', { ascending: false }).limit(50),
         supabase.from('deletion_requests').select('*', { count: 'exact', head: true }).eq('organization_id', (profile as any).organization_id),
       ]);
 
       const documents = (docsResult.data || []) as any[];
       const users = (usersResult.data || []) as any[];
       const categories = (catsResult.data || []) as any[];
-      const logs = (logsResult.data || []) as any[];
 
       const now = new Date();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -158,11 +149,6 @@ export default function StatisticsPage() {
         .slice(0, 5);
       setTopUploaders(uploaders);
 
-      const enrichedLogs = logs.slice(0, 10).map((log) => ({
-        ...log,
-        user_name: users.find((u) => u.id === log.user_id)?.full_name,
-      }));
-      setRecentActivity(enrichedLogs);
     } catch (error) {
       console.error('Error loading statistics:', error);
     } finally {

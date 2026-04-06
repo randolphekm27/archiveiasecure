@@ -171,9 +171,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw new Error('Votre compte est actif mais votre profil est manquant. Veuillez contacter l’administrateur.');
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('SignIn error details:', error);
       if (error instanceof Error) throw error;
+      if (error?.message) throw new Error(error.message);
       throw new Error('Erreur de connexion');
     }
   };
@@ -225,9 +226,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         await loadProfile(authData.user.id);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Signup error:', error);
       if (error instanceof Error) throw error;
+      if (error?.message) throw new Error(error.message);
       throw new Error('Erreur lors de l\'inscription');
     }
   };
@@ -336,9 +338,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // 7. Finalize loading state
         await loadProfile(authData.user.id);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Create organization error:', error);
       if (error instanceof Error) throw error;
+      if (error?.message) throw new Error(error.message);
       throw new Error('Erreur lors de la création de l\'organisation');
     }
   };
