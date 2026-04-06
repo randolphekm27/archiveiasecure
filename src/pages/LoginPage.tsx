@@ -191,7 +191,7 @@ export default function LoginPage() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Nom d'utilisateur
+                  Utilisateur ou Email
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
@@ -202,7 +202,7 @@ export default function LoginPage() {
                     required
                     value={loginForm.username}
                     onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
-                    placeholder="jean.dupont"
+                    placeholder="jean.dupont ou email@exemple.com"
                     className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
                   />
                 </div>

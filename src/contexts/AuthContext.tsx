@@ -130,36 +130,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await supabase.auth.signOut({ scope: 'local' });
       }
 
-      const virtualEmail = generateVirtualEmail(username, orgCode);
+      // 1. Generate virtual email from username (it might be a username or a real email)
+      let virtualEmail = generateVirtualEmail(username, orgCode);
       console.log(`[Auth] Attempting login: Org=${orgCode}, User=${username} -> vEmail=${virtualEmail}`);
 
-      // Attempt login with virtual email first (standard for this app)
+      // 2. Attempt login with virtual email
       let { data: authUser, error: authError } = await supabase.auth.signInWithPassword({
         email: virtualEmail,
         password,
       });
 
-      // If that fails, try with the username/email directly as some users might try their real email
-      // Note: This only works if their auth account was created with their real email, 
-      // which happens in some alternate signup flows or legacy data.
-      if (authError) {
-        console.warn(`[Auth] Virtual email login failed: ${authError.message}. Trying direct email...`);
-        const { data: directAuth, error: directError } = await supabase.auth.signInWithPassword({
-          email: username,
-          password,
-        });
+      // 3. Optional: If that fails and input looks like an email or might be one, 
+      // try to look up the correct virtual email using the RPC
+      if (authError && (username.includes('@') || authError.message.includes('Invalid login credentials'))) {
+        try {
+          console.log(`[Auth] Virtual email login failed. Searching for virtual email for: ${username} in org: ${orgCode}`);
+          const { data: foundVirtualEmail, error: rpcError } = await (supabase as any).rpc('get_auth_email_for_reset', {
+            real_email: username.trim().toLowerCase(),
+            organization_code: orgCode.toUpperCase()
+          });
 
-        if (!directError) {
-          authUser = directAuth;
-          authError = null;
-        } else {
-          console.error(`[Auth] Direct login also failed: ${directError.message}`);
+          if (!rpcError && foundVirtualEmail) {
+            console.log(`[Auth] Found actual virtual email: ${foundVirtualEmail}. Retrying login...`);
+            const { data: retryAuth, error: retryError } = await supabase.auth.signInWithPassword({
+              email: foundVirtualEmail,
+              password,
+            });
+
+            if (!retryError) {
+              authUser = retryAuth;
+              authError = null;
+            }
+          }
+        } catch (innerError) {
+          console.warn('[Auth] Error during virtual email lookup fallback:', innerError);
         }
       }
 
+      // 4. Handle final error
       if (authError) {
         if (authError.message.includes('Invalid login credentials') || authError.message.includes('User not found')) {
-          throw new Error('Identifiants ou mot de passe incorrects. Rappelez-vous que vous devez utiliser votre nom d’utilisateur (ex: jean.dupont) et non votre email si vous avez créé une organisation.');
+          throw new Error('Identifiants ou mot de passe incorrects. Vérifiez votre utilisateur/email et le code organisation.');
         }
         throw authError;
       }
