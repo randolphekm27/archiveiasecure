@@ -8,7 +8,9 @@ import {
   ArrowRight,
   ShieldAlert,
   FileX,
-  History
+  History,
+  FolderOpen,
+  FileText
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -51,7 +53,7 @@ export default function GovernancePage({ onNavigate }: { onNavigate: (page: stri
         supabase.from('deletion_requests').select('*', { count: 'exact', head: true }).eq('organization_id', profile.organization_id).in('status', ['pending', 'info_requested']),
         supabase.from('secure_trash').select('*', { count: 'exact', head: true }).eq('organization_id', profile.organization_id),
         supabase.from('users').select('*', { count: 'exact', head: true }).eq('organization_id', profile.organization_id).eq('role', 'admin'),
-        supabase.from('deletion_requests').select('*, document:documents(*)').eq('organization_id', profile.organization_id).order('created_at', { ascending: false }).limit(3),
+        supabase.from('deletion_requests').select('*, document:documents(*), category:categories(*)').eq('organization_id', profile.organization_id).order('created_at', { ascending: false }).limit(3),
         supabase.from('activity_logs').select('*, user:users(full_name)').eq('organization_id', profile.organization_id).order('created_at', { ascending: false }).limit(5)
       ]);
 
@@ -151,8 +153,9 @@ export default function GovernancePage({ onNavigate }: { onNavigate: (page: stri
                 {recentRequests.map(req => (
                   <div key={req.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold text-slate-900 truncate">
-                        {req.document?.title || 'Document inconnu'}
+                      <p className="text-sm font-bold text-slate-900 truncate flex items-center gap-2">
+                        {req.target_type === 'category' ? <FolderOpen className="w-4 h-4 text-amber-500" /> : <FileText className="w-4 h-4 text-red-500" />}
+                        {req.target_type === 'category' ? req.category?.name || 'Catégorie inconnue' : req.document?.title || 'Document inconnu'}
                       </p>
                       <p className="text-xs text-slate-500">
                         Demande le {new Date(req.created_at).toLocaleDateString()}

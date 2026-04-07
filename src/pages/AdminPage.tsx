@@ -14,6 +14,7 @@ import {
   Shield,
   Send,
   Edit2,
+  Download,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -57,6 +58,7 @@ export default function AdminPage() {
     name: '',
     description: '',
     color: '#3B82F6',
+    retention_period_years: 10,
   });
 
   const [invitationResult, setInvitationResult] = useState<{
@@ -179,6 +181,46 @@ export default function AdminPage() {
       console.error('Error loading data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleExportData = async () => {
+    try {
+      if (!profile?.organization_id) return;
+      const [usersResult, catsResult, docsResult] = await Promise.all([
+        supabase.from('users').select('*').eq('organization_id', profile.organization_id),
+        supabase.from('categories').select('*').eq('organization_id', profile.organization_id),
+        supabase.from('documents').select('*').eq('organization_id', profile.organization_id),
+      ]);
+
+      const data = {
+        exportDate: new Date().toISOString(),
+        organizationId: profile.organization_id,
+        users: usersResult.data,
+        categories: catsResult.data,
+        documents: docsResult.data,
+      };
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `backup_${profile.organization_id}_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      await logActivity({
+        organizationId: profile.organization_id,
+        userId: profile.id,
+        action: 'system.backup_exported',
+        details: { recordsExported: (usersResult.data?.length || 0) + (catsResult.data?.length || 0) + (docsResult.data?.length || 0) }
+      });
+      
+    } catch (err) {
+      console.error('Export failed', err);
+      alert("Erreur lors de l'export des données.");
     }
   };
 
@@ -314,6 +356,7 @@ export default function AdminPage() {
         name: newCategory.name,
         description: newCategory.description,
         color: newCategory.color,
+        retention_period_years: newCategory.retention_period_years,
       });
 
       if (error) throw error;
@@ -327,32 +370,42 @@ export default function AdminPage() {
 
       await loadData();
       setShowCategoryModal(false);
-      setNewCategory({ name: '', description: '', color: '#3B82F6' });
+      setNewCategory({ name: '', description: '', color: '#3B82F6', retention_period_years: 10 });
     } catch (error) {
       console.error('Error adding category:', error);
     }
   };
 
   const handleDeleteCategory = async (categoryId: string) => {
-    if (!confirm('Confirmer la suppression de cette categorie ?')) return;
+    const reason = prompt('Veuillez indiquer la raison de cette demande de suppression de catégorie (requiert un vote consensuel des administrateurs) :');
+    if (!reason) return;
 
     try {
       const cat = categories.find((c) => c.id === categoryId);
-      const { error } = await supabase.from('categories').delete().eq('id', categoryId);
+      const { error } = await (supabase as any).from('deletion_requests').insert({
+        organization_id: profile?.organization_id,
+        target_type: 'category',
+        category_id: categoryId,
+        requested_by: profile?.id,
+        reason: reason
+      });
       if (error) throw error;
 
       if (profile) {
         await logActivity({
           organizationId: profile.organization_id,
           userId: profile.id,
-          action: 'category.deleted',
-          details: { name: cat?.name },
+          action: 'category.deletion_requested',
+          details: { name: cat?.name, reason },
         });
       }
 
+      alert('Demande de suppression de catégorie soumise au vote des administrateurs.');
+
       await loadData();
     } catch (error) {
-      console.error('Error deleting category:', error);
+      console.error('Error requesting category deletion:', error);
+      alert('Erreur lors de la demande de suppression.');
     }
   };
 
@@ -412,9 +465,18 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900 mb-1">Administration</h2>
-        <p className="text-slate-600">Gerez votre organisation</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-1">Administration</h2>
+          <p className="text-slate-600">Gerez votre organisation</p>
+        </div>
+        <button
+          onClick={handleExportData}
+          className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-sm"
+        >
+          <Download className="w-4 h-4" />
+          <span className="hidden sm:inline">Exporter les donnees</span>
+        </button>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -559,6 +621,9 @@ export default function AdminPage() {
                         {cat.description && (
                           <p className="text-sm text-slate-600 truncate">{cat.description}</p>
                         )}
+                        <p className="text-xs text-slate-500 mt-1">
+                          Rétention : {(cat as any).retention_period_years || 10} an(s)
+                        </p>
                       </div>
                     </div>
                     <button
@@ -934,6 +999,22 @@ export default function AdminPage() {
                     className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-mono"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Période de rétention (années)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  required
+                  value={newCategory.retention_period_years}
+                  onChange={(e) => setNewCategory({ ...newCategory, retention_period_years: parseInt(e.target.value) })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+                <p className="text-xs text-slate-500 mt-1">Les documents seront conservés cette durée avant proposition d'archivage.</p>
               </div>
 
               <div className="flex gap-3 pt-2">

@@ -80,6 +80,7 @@ export type Database = {
           id: string
           name: string
           organization_id: string
+          retention_period_years: number | null
         }
         Insert: {
           color?: string | null
@@ -88,6 +89,7 @@ export type Database = {
           id?: string
           name: string
           organization_id: string
+          retention_period_years?: number | null
         }
         Update: {
           color?: string | null
@@ -96,6 +98,7 @@ export type Database = {
           id?: string
           name?: string
           organization_id?: string
+          retention_period_years?: number | null
         }
         Relationships: [
           {
@@ -109,39 +112,52 @@ export type Database = {
       }
       deletion_requests: {
         Row: {
+          category_id: string | null
           created_at: string | null
-          document_id: string
+          document_id: string | null
           id: string
           organization_id: string
           reason: string
           requested_by: string
           resolved_at: string | null
           status: string
+          target_type: string | null
           votes_required: number
         }
         Insert: {
+          category_id?: string | null
           created_at?: string | null
-          document_id: string
+          document_id?: string | null
           id?: string
           organization_id: string
           reason?: string
           requested_by: string
           resolved_at?: string | null
           status?: string
+          target_type?: string | null
           votes_required?: number
         }
         Update: {
+          category_id?: string | null
           created_at?: string | null
-          document_id?: string
+          document_id?: string | null
           id?: string
           organization_id?: string
           reason?: string
           requested_by?: string
           resolved_at?: string | null
           status?: string
+          target_type?: string | null
           votes_required?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "deletion_requests_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "deletion_requests_document_id_fkey"
             columns: ["document_id"]
@@ -221,6 +237,7 @@ export type Database = {
           is_important: boolean | null
           keywords: string[] | null
           organization_id: string
+          registration_number: string | null
           title: string
           updated_at: string | null
           uploaded_by: string
@@ -239,6 +256,7 @@ export type Database = {
           is_important?: boolean | null
           keywords?: string[] | null
           organization_id: string
+          registration_number?: string | null
           title: string
           updated_at?: string | null
           uploaded_by: string
@@ -257,6 +275,7 @@ export type Database = {
           is_important?: boolean | null
           keywords?: string[] | null
           organization_id?: string
+          registration_number?: string | null
           title?: string
           updated_at?: string | null
           uploaded_by?: string
@@ -303,7 +322,7 @@ export type Database = {
           id?: string
           is_read?: boolean | null
           link_to?: string | null
-          message: string
+          message?: string
           organization_id: string
           title: string
           type?: string
@@ -393,33 +412,39 @@ export type Database = {
       }
       secure_trash: {
         Row: {
+          category_data: Json | null
+          category_id: string | null
           created_at: string | null
           deleted_by: string
           deletion_request_id: string | null
-          document_data: Json
-          document_id: string
+          document_data: Json | null
+          document_id: string | null
           expires_at: string
           id: string
           organization_id: string
           restored_at: string | null
         }
         Insert: {
+          category_data?: Json | null
+          category_id?: string | null
           created_at?: string | null
           deleted_by: string
           deletion_request_id?: string | null
-          document_data: Json
-          document_id: string
+          document_data?: Json | null
+          document_id?: string | null
           expires_at?: string
           id?: string
           organization_id: string
           restored_at?: string | null
         }
         Update: {
+          category_data?: Json | null
+          category_id?: string | null
           created_at?: string | null
           deleted_by?: string
           deletion_request_id?: string | null
-          document_data?: Json
-          document_id?: string
+          document_data?: Json | null
+          document_id?: string | null
           expires_at?: string
           id?: string
           organization_id?: string
@@ -584,11 +609,12 @@ export type Database = {
     Functions: {
       get_auth_email_for_reset: {
         Args: { organization_code: string; real_email: string }
-        Returns: string | null
+        Returns: string
       }
       get_user_organization_id: { Args: never; Returns: string }
       get_user_role: { Args: never; Returns: string }
       restore_document: { Args: { trash_id: string }; Returns: string }
+      restore_from_trash: { Args: { trash_id: string }; Returns: string }
       verify_user_and_org: {
         Args: { organization_code: string; user_email: string }
         Returns: boolean
@@ -609,116 +635,116 @@ type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
-  | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
-  | { schema: keyof DatabaseWithoutInternals },
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-  ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-    DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-  : never = never,
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-    DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
       Row: infer R
     }
-  ? R
-  : never
+    ? R
+    : never
   : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
-    DefaultSchema["Views"])
-  ? (DefaultSchema["Tables"] &
-    DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
-      Row: infer R
-    }
-  ? R
-  : never
-  : never
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-  | keyof DefaultSchema["Tables"]
-  | { schema: keyof DatabaseWithoutInternals },
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-  ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-  : never = never,
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-    Insert: infer I
-  }
-  ? I
-  : never
+      Insert: infer I
+    }
+    ? I
+    : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-    Insert: infer I
-  }
-  ? I
-  : never
-  : never
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-  | keyof DefaultSchema["Tables"]
-  | { schema: keyof DatabaseWithoutInternals },
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-  ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-  : never = never,
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-    Update: infer U
-  }
-  ? U
-  : never
+      Update: infer U
+    }
+    ? U
+    : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-    Update: infer U
-  }
-  ? U
-  : never
-  : never
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-  | keyof DefaultSchema["Enums"]
-  | { schema: keyof DatabaseWithoutInternals },
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
   EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-  ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-  : never = never,
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
-  ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
-  : never
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
-  | keyof DefaultSchema["CompositeTypes"]
-  | { schema: keyof DatabaseWithoutInternals },
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
   CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-  ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-  : never = never,
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
-  ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-  : never
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
 
 export const Constants = {
   public: {

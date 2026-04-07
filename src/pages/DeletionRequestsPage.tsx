@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   Users,
   Zap,
+  FolderOpen,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -20,9 +21,11 @@ type DeletionRequest = Database['public']['Tables']['deletion_requests']['Row'];
 type DeletionVote = Database['public']['Tables']['deletion_votes']['Row'];
 type UserProfile = Database['public']['Tables']['users']['Row'];
 type Document = Database['public']['Tables']['documents']['Row'];
+type Category = Database['public']['Tables']['categories']['Row'];
 
 interface RequestWithDetails extends DeletionRequest {
   document?: Document;
+  category?: Category;
   requester?: UserProfile;
   votes: (DeletionVote & { voter?: UserProfile })[];
 }
@@ -44,7 +47,7 @@ export default function DeletionRequestsPage() {
     if (!profile?.organization_id) return;
 
     try {
-      const [reqResult, usersResult, docsResult, votesResult] = await Promise.all([
+      const [reqResult, usersResult, docsResult, catsResult, votesResult] = await Promise.all([
         supabase
           .from('deletion_requests')
           .select('*')
@@ -54,11 +57,13 @@ export default function DeletionRequestsPage() {
           .order('created_at', { ascending: false }),
         supabase.from('users').select('*').eq('organization_id', profile.organization_id),
         supabase.from('documents').select('*').eq('organization_id', profile.organization_id),
+        supabase.from('categories').select('*').eq('organization_id', profile.organization_id),
         supabase.from('deletion_votes').select('*'),
       ]);
 
       const users = usersResult.data || [];
       const docs = docsResult.data || [];
+      const cats = catsResult.data || [];
       const votes = votesResult.data || [];
       const reqData = reqResult.data || [];
 
@@ -68,6 +73,7 @@ export default function DeletionRequestsPage() {
       const enriched: RequestWithDetails[] = reqData.map((req: any) => ({
         ...req,
         document: docs.find((d: any) => d.id === req.document_id),
+        category: cats.find((c: any) => c.id === req.category_id),
         requester: users.find((u: any) => u.id === req.requested_by),
         votes: votes
           .filter((v: any) => v.deletion_request_id === req.id)
@@ -249,12 +255,18 @@ export default function DeletionRequestsPage() {
                 <div className="p-6">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-start gap-4">
-                      <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                        <FileText className="w-6 h-6 text-red-500" />
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${request.target_type === 'category' ? 'bg-amber-50' : 'bg-red-50'}`}>
+                        {request.target_type === 'category' ? (
+                          <FolderOpen className="w-6 h-6 text-amber-500" />
+                        ) : (
+                          <FileText className="w-6 h-6 text-red-500" />
+                        )}
                       </div>
                       <div>
                         <h3 className="font-semibold text-slate-900 text-lg">
-                          {request.document?.title || 'Document introuvable'}
+                          {request.target_type === 'category'
+                            ? `Catégorie : ${request.category?.name || 'Introuvable'}`
+                            : `Document : ${request.document?.title || 'Introuvable'}`}
                         </h3>
                         <div className="flex items-center gap-3 mt-1">
                           <span className="flex items-center gap-1 text-sm text-slate-500">

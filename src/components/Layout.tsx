@@ -48,6 +48,25 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
     setPendingDeletions(count || 0);
   };
 
+  useEffect(() => {
+    if (organization) {
+      const root = document.documentElement;
+      if (organization.primary_color) {
+        root.style.setProperty('--color-primary', organization.primary_color);
+      }
+      if ((organization as any).secondary_color) {
+        root.style.setProperty('--color-secondary', (organization as any).secondary_color);
+      }
+      if ((organization as any).font_family) {
+        root.style.setProperty('--font-family', (organization as any).font_family);
+      }
+      
+      if (organization.name) {
+        document.title = `${organization.name} - Portail Interne`;
+      }
+    }
+  }, [organization]);
+
   const isAdmin = profile?.role === 'admin';
   const canUpload = profile?.role !== 'reader';
 

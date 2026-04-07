@@ -278,6 +278,7 @@ export default function DocumentsPage() {
               <table className="w-full">
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
+                    <th className="text-left px-6 py-3 text-sm font-semibold text-slate-700">N° Enregistrement</th>
                     <th className="text-left px-6 py-3 text-sm font-semibold text-slate-700">Document</th>
                     <th className="text-left px-6 py-3 text-sm font-semibold text-slate-700">Date</th>
                     <th className="text-left px-6 py-3 text-sm font-semibold text-slate-700">Categorie</th>
@@ -288,6 +289,11 @@ export default function DocumentsPage() {
                 <tbody className="divide-y divide-slate-200">
                   {documents.map((doc) => (
                     <tr key={doc.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-4">
+                        <span className="font-mono text-sm text-slate-600 bg-slate-100 px-2 py-1 rounded">
+                          {doc.registration_number || '-'}
+                        </span>
+                      </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div
@@ -402,8 +408,13 @@ export default function DocumentsPage() {
                       <FileText className="w-5 h-5" style={{ color: getCategoryColor(doc.category_id) }} />
                     </div>
                     {doc.is_important && (
-                      <Star className="w-5 h-5 text-amber-500 fill-amber-500" />
+                      <Star className="w-5 h-5 text-amber-500 fill-amber-500 flex-shrink-0" />
                     )}
+                  </div>
+                  <div className="mb-2">
+                    <span className="font-mono text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
+                      {doc.registration_number || '-'}
+                    </span>
                   </div>
                   <h3 className="font-semibold text-slate-900 mb-1 line-clamp-2">{doc.title}</h3>
                   {doc.description && (

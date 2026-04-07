@@ -24,6 +24,7 @@ interface Stats {
   documentsLastMonth: number;
   deletionRequests: number;
   activeUsers: number;
+  retentionAlerts: number;
 }
 
 interface CategoryStat {
@@ -49,6 +50,7 @@ export default function StatisticsPage() {
     documentsLastMonth: 0,
     deletionRequests: 0,
     activeUsers: 0,
+    retentionAlerts: 0,
   });
   const [categoryStats, setCategoryStats] = useState<CategoryStat[]>([]);
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
@@ -92,6 +94,20 @@ export default function StatisticsPage() {
         (d) => new Date(d.created_at) >= startOfLastMonth && new Date(d.created_at) < startOfMonth
       );
 
+      let retentionAlertsCount = 0;
+      documents.forEach(doc => {
+        if (doc.category_id) {
+           const cat = categories.find(c => c.id === doc.category_id);
+           if (cat && cat.retention_period_years) {
+              const ageInMs = now.getTime() - new Date(doc.created_at).getTime();
+              const ageInYears = ageInMs / (1000 * 60 * 60 * 24 * 365.25);
+              if (ageInYears >= cat.retention_period_years) {
+                 retentionAlertsCount++;
+              }
+           }
+        }
+      });
+
       setStats({
         totalDocuments: documents.length,
         totalUsers: users.length,
@@ -101,6 +117,7 @@ export default function StatisticsPage() {
         documentsLastMonth: docsLastMonth.length,
         deletionRequests: deletionsResult.count || 0,
         activeUsers: users.filter((u) => u.is_active).length,
+        retentionAlerts: retentionAlertsCount,
       });
 
       const catCounts = categories.map((cat) => {
@@ -312,7 +329,8 @@ export default function StatisticsPage() {
               { label: 'Ce mois-ci', value: stats.documentsThisMonth, icon: Calendar, color: 'bg-blue-50 text-blue-700' },
               { label: 'Mois dernier', value: stats.documentsLastMonth, icon: Clock, color: 'bg-slate-100 text-slate-700' },
               { label: 'Demandes suppr.', value: stats.deletionRequests, icon: Trash2, color: 'bg-red-50 text-red-700' },
-              { label: 'Utilisateurs actifs', value: stats.activeUsers, icon: Users, color: 'bg-emerald-50 text-emerald-700' },
+              { label: 'Alertes rétention', value: stats.retentionAlerts, icon: Clock, color: 'bg-orange-50 text-orange-700' },
+              { label: 'Util. actifs', value: stats.activeUsers, icon: Users, color: 'bg-emerald-50 text-emerald-700' },
             ].map((item) => {
               const Icon = item.icon;
               return (
